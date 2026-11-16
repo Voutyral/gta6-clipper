@@ -163,3 +163,66 @@ def test_streamer_lookup_and_learn_keyword():
     assert match_streamer(streamers, "alice") == {}
     assert is_learn_request("Apprends https://youtu.be/x le montage")
     assert not is_learn_request("https://youtu.be/x 1:00-1:30")
+
+
+def test_whisper_path_gets_an_array_and_cleans_words(tmp_path, monkeypatch):
+    import subprocess
+    import sys
+    import types
+
+    from clipper import transcribe
+
+    wav_src = tmp_path / "tone.wav"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=f=440:d=4", str(wav_src)],
+                   check=True)
+    seen = {}
+
+    def word(text, s, e):
+        return types.SimpleNamespace(word=text, start=s, end=e, probability=0.9)
+
+    class FakeModel:
+        def transcribe(self, audio, **kw):
+            seen["type"], seen["dtype"], seen["n"] = type(audio).__name__, str(audio.dtype), audio.shape[0]
+            seen["kw"] = kw
+            segs = [
+                types.SimpleNamespace(text=" J'ai sauté.", no_speech_prob=0.1, avg_logprob=-0.2,
+                                      words=[word(" J'", 0.5, 0.7), word("ai", 0.7, 0.9), word(" sauté.", 1.0, 1.5)]),
+                types.SimpleNamespace(text=" Sous-titres réalisés par la communauté", no_speech_prob=0.2,
+                                      avg_logprob=-0.3, words=[word(" Sous-titres", 2.0, 2.5)]),
+            ]
+            return iter(segs), types.SimpleNamespace(language="fr")
+
+    monkeypatch.delenv("CLIPPER_MOCK_WORDS", raising=False)
+    monkeypatch.setitem(transcribe._MODELS, "small", FakeModel())
+    monkeypatch.setitem(sys.modules, "faster_whisper",
+                        types.SimpleNamespace(WhisperModel=lambda *a, **k: FakeModel()))
+    words, lang = transcribe.transcribe(wav_src, 1.0, 3.0, model_name="small", workdir=tmp_path)
+    assert seen["type"] == "ndarray" and seen["dtype"] == "float32" and seen["n"] == 48000
+    assert seen["kw"]["word_timestamps"] is True
+    assert lang == "fr" and [w["w"] for w in words] == ["J'AI", "SAUTÉ"]
+    assert abs(words[0]["s"] - 1.5) < 1e-6 and words[1]["eos"]
+
+
+def test_github_models_fall_back_to_text_and_explain_empty_answers(monkeypatch):
+    import types
+
+    cfg = load_config()
+    calls = []
+
+    def fake_get(url, **kw):
+        return types.SimpleNamespace(status_code=200, json=lambda: [{"id": "openai/gpt-4o-mini"}, {"id": "openai/other"}], text="")
+
+    def fake_post(url, json=None, **kw):
+        has_image = isinstance(json["messages"][1]["content"], list)
+        calls.append((json["model"], has_image))
+        body = {"choices": [{"message": {"content": None if has_image else '{"score": 7}'}}]}
+        return types.SimpleNamespace(status_code=200, json=lambda: body, text=str(body))
+
+    monkeypatch.setenv("GITHUB_TOKEN", "x" * 10)
+    monkeypatch.setattr(ai.requests, "get", fake_get)
+    monkeypatch.setattr(ai.requests, "post", fake_post)
+    monkeypatch.setitem(ai._state, "github_model", None)
+    monkeypatch.setitem(ai._state, "github_catalog", None)
+    out = ai._github(cfg, "système", "texte", b"\xff\xd8image")
+    assert out == '{"score": 7}'
+    assert calls == [("openai/gpt-4o-mini", True), ("openai/gpt-4o-mini", False)]

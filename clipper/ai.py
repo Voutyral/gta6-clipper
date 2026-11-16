@@ -20,7 +20,8 @@ import requests
 from .util import log
 
 GEMINI = "https://generativelanguage.googleapis.com"
-_state: dict = {"gemini_model": None, "github_model": None, "off": set(), "fails": {}}
+_state: dict = {"gemini_model": None, "github_model": None, "github_catalog": None,
+                "off": set(), "fails": {}}
 
 
 def providers(cfg: dict) -> list[str]:
@@ -143,33 +144,78 @@ def _claude(cfg: dict, system: str, text: str, sheet: bytes | None) -> str | Non
     return "".join(b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text")
 
 
-def _github(cfg: dict, system: str, text: str, sheet: bytes | None) -> str | None:
+def _github_headers() -> dict:
+    return {"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+            "Accept": "application/vnd.github+json", "Content-Type": "application/json"}
+
+
+def _github_models(cfg: dict) -> list[str]:
+    """Modèles de config.yaml encore présents au catalogue ; sinon les premiers modèles OpenAI trouvés."""
+    wanted = list(cfg["ai"]["github_models"])
+    if _state.get("github_catalog") is None:
+        ids: list[str] = []
+        try:
+            r = requests.get("https://models.github.ai/catalog/models", headers=_github_headers(), timeout=30)
+            if r.status_code == 200:
+                data = r.json()
+                items = data if isinstance(data, list) else data.get("models", [])
+                ids = [str(m.get("id")) for m in items if isinstance(m, dict) and m.get("id")]
+            else:
+                log(f"GitHub Models : catalogue HTTP {r.status_code} {r.text[:120]}")
+        except Exception as exc:
+            log(f"GitHub Models : catalogue illisible ({exc})")
+        _state["github_catalog"] = ids
+    ids = _state["github_catalog"]
+    if not ids:
+        return wanted
+    present = [m for m in wanted if m in ids]
+    if present:
+        return present
+    found = [i for i in ids if i.startswith("openai/gpt") and "embed" not in i][:4]
+    log(f"GitHub Models : aucun modèle de config.yaml au catalogue. Essai avec {found}. "
+        f"Disponibles : {', '.join(ids[:40])}")
+    return found or wanted
+
+
+def _github_once(model: str, system: str, text: str, sheet: bytes | None) -> tuple[str | None, int]:
     content: list[dict] = [{"type": "text", "text": text}]
     if sheet:
         content.append({"type": "image_url", "image_url": {
             "url": "data:image/jpeg;base64," + base64.b64encode(sheet).decode()}})
-    models = [_state["github_model"]] if _state["github_model"] else list(cfg["ai"]["github_models"])
-    for model in models:
-        try:
-            r = requests.post("https://models.github.ai/inference/chat/completions", timeout=180,
-                              headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
-                                       "Accept": "application/vnd.github+json",
-                                       "Content-Type": "application/json"},
-                              json={"model": model, "messages": [
-                                  {"role": "system", "content": system},
-                                  {"role": "user", "content": content}]})
-        except requests.RequestException as exc:
-            log(f"GitHub Models injoignable : {exc}")
-            return None
-        if r.status_code == 200:
-            _state["github_model"] = model
+    r = requests.post("https://models.github.ai/inference/chat/completions", timeout=180,
+                      headers=_github_headers(),
+                      json={"model": model, "messages": [
+                          {"role": "system", "content": system},
+                          {"role": "user", "content": content if sheet else text}]})
+    if r.status_code != 200:
+        log(f"GitHub Models {model} : HTTP {r.status_code} {r.text[:200]}")
+        return None, r.status_code
+    try:
+        out = r.json()["choices"][0]["message"].get("content")
+        if isinstance(out, list):   # certains modèles répondent par morceaux
+            out = "".join(p.get("text", "") for p in out if isinstance(p, dict))
+    except Exception:
+        out = None
+    if not out:
+        log(f"GitHub Models {model} : réponse vide ({r.text[:300]})")
+    return (out or None), 200
+
+
+def _github(cfg: dict, system: str, text: str, sheet: bytes | None) -> str | None:
+    models = [_state["github_model"]] if _state["github_model"] else _github_models(cfg)
+    # Avec l'image d'abord ; si aucun modèle ne répond, un second tour en texte seul.
+    for with_sheet in ((True, False) if sheet else (False,)):
+        for model in models:
             try:
-                return r.json()["choices"][0]["message"]["content"]
-            except Exception:
+                out, code = _github_once(model, system, text, sheet if with_sheet else None)
+            except requests.RequestException as exc:
+                log(f"GitHub Models injoignable : {exc}")
                 return None
-        log(f"GitHub Models {model} : HTTP {r.status_code} {r.text[:160]}")
-        if r.status_code in (401, 403):
-            return None
+            if out:
+                _state["github_model"] = model
+                return out
+            if code in (401, 403):
+                return None
     return None
 
 

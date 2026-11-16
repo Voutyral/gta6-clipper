@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import os
+import wave
 from pathlib import Path
+
+import numpy as np
 
 from .captions import normalize_words
 from .util import log, run
@@ -57,12 +60,18 @@ def _whisper(src, ss: float, dur: float, model_name: str, language: str | None,
     try:
         run(["ffmpeg", "-v", "error", "-nostdin", "-y", "-ss", f"{ss:.3f}", "-t", f"{dur:.3f}",
              "-i", str(src), "-vn", "-ac", "1", "-ar", "16000", str(wav)], quiet=True)
+        # Le son est lu ici puis donné à Whisper en tableau : le décodeur intégré
+        # de faster-whisper (PyAV) casse selon les versions installées.
+        with wave.open(str(wav)) as w:
+            audio = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype(np.float32) / 32768.0
+        if audio.size < 1600:
+            return [], ""
         if model_name not in _MODELS:
             log(f"Chargement du modèle Whisper « {model_name} »…")
             _MODELS[model_name] = WhisperModel(model_name, device="cpu", compute_type="int8",
                                                cpu_threads=os.cpu_count() or 2)
         segments, info = _MODELS[model_name].transcribe(
-            str(wav), language=language, word_timestamps=True, vad_filter=True, beam_size=5,
+            audio, language=language, word_timestamps=True, vad_filter=True, beam_size=5,
             condition_on_previous_text=False)
         words: list[dict] = []
         for seg in segments:
@@ -82,7 +91,9 @@ def _whisper(src, ss: float, dur: float, model_name: str, language: str | None,
                 else:
                     words.append({"raw": tok.strip(), "s": float(w.start), "e": float(w.end),
                                   "p": float(getattr(w, "probability", 1.0) or 1.0)})
-        return words, (getattr(info, "language", "") or "")
+        lang = getattr(info, "language", "") or ""
+        log(f"Transcription : {len(words)} mots, langue « {lang or '?'} ».")
+        return words, lang
     except Exception as exc:
         log(f"Transcription échouée, clip rendu sans sous-titres : {exc}")
         return [], ""

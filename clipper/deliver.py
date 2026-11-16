@@ -179,6 +179,10 @@ def markdown_report(results: list, errors: list) -> str:
     for res in results:
         out.append(f"### {_status(res)} · {res.title}")
         out.append(f"- Durée {res.duration:.0f} s, {res.size_mb:.0f} Mo, accroche « {res.hook} »")
+        f = res.facts
+        out.append(f"- Montage : {f.get('layout')}, aperçu {'oui' if f.get('teaser') else 'non'}, "
+                   f"{f.get('punches', 0)} impact(s), {f.get('captions', 0)} mots sous-titrés, "
+                   f"IA : {res.provider or 'aucune'}")
         if res.link:
             out.append(f"- [Télécharger le clip]({res.link})")
         if res.telegram:
