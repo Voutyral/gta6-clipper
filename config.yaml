@@ -1,0 +1,74 @@
+# Réglages du clippeur. Modifiable depuis le téléphone : ouvre ce fichier sur GitHub, icône crayon.
+# Tout est optionnel : une ligne supprimée reprend sa valeur par défaut.
+
+metadata:
+  game: "GTA 6"
+  language: fr                      # langue des titres, accroches et descriptions
+  hashtags: ["#GTA6", "#GTAVI", "#Shorts"]
+  fallback_hooks:                   # accroches utilisées seulement si aucune IA ne répond
+    - "ATTENDS LA FIN"
+    - "PERSONNE S'Y ATTENDAIT"
+    - "IL A VRAIMENT FAIT ÇA"
+    - "GTA 6 EST FOU"
+
+detection:
+  clips_per_video: 2                # clips tirés d'une longue vidéo (x3 dans la demande pour changer)
+  extra_candidates: 2               # passages en plus soumis à l'IA pour qu'elle choisisse
+  clip_min_s: 15
+  clip_max_s: 45
+  pre_peak_s: 12                    # secondes gardées avant le moment fort (la mise en place)
+  post_peak_s: 14                   # secondes gardées après (la réaction)
+  keep_whole_if_under_s: 61         # source plus courte : on la garde entière (clips Twitch)
+
+fetch:
+  max_height: 1080
+  full_download_max_s: 900          # au-delà, on repère d'abord au son puis on télécharge par passages
+  max_scan_s: 14400                 # durée maximale écoutée sur un long stream (4 h)
+
+edit:
+  layout: auto                      # auto | blur (jeu centré, fond flou) | crop (plein écran) | split (caméra en haut)
+  zoom: 1.25                        # zoom du jeu en mise en page blur
+  teaser: auto                      # aperçu du moment fort en ouverture : auto | on | off
+  teaser_s: 1.8
+  punch: true                       # zoom et secousse brefs sur chaque impact
+  punch_zoom: 1.12
+  shake_px: 12
+  max_punches: 3
+  sfx: true                         # bruitages générés par le programme (whoosh, impact)
+  sfx_gain_db: -9
+  music: auto                       # joue une piste de assets/music si le dossier en contient
+  music_gain_db: -21
+  hook_seconds: 3.5
+  credit_prefix: "Clip :"
+
+captions:
+  enabled: true
+  whisper_model: small              # tiny | base | small (small : bon compromis sur GitHub)
+  style: reveal                     # reveal (mots à venir estompés) | pop (mot courant coloré seulement)
+  max_words: 3
+  max_chars: 13
+  highlight: "&H0000E5FF"           # jaune, au format ASS (bleu, vert, rouge)
+
+ai:
+  enabled: true
+  gemini_models: [gemini-3.8-flash, gemini-3-flash-preview, gemini-2.5-flash]
+  github_models: [openai/gpt-4.1-mini, openai/gpt-4o-mini, openai/gpt-4.1, openai/gpt-4o]
+  claude_model: claude-haiku-5-5
+
+delivery:
+  telegram: true
+  release: true                     # lien de téléchargement sur GitHub
+  keep_days: 7                      # les clips plus vieux sont supprimés de GitHub
+
+youtube:
+  mode: off                         # off | private | public (il faut aussi les 3 secrets YT_*, voir README)
+  category_id: "20"                 # 20 = jeux vidéo
+
+radar:
+  enabled: true
+  range: 24hr                       # 24hr | 7d | 30d
+  min_views: 300
+  max_per_streamer: 2
+  max_per_run: 4
+  require_keywords: false           # true : ne garde que les clips dont le titre contient un mot-clé
+  keywords: ["gta", "grand theft auto", "vice city", "leonida"]

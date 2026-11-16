@@ -1,0 +1,5 @@
+numpy>=1.26
+PyYAML>=6.0
+requests>=2.31
+faster-whisper>=1.1
+yt-dlp[default,curl-cffi]

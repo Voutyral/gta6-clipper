@@ -1,0 +1,18 @@
+# Streamers que tu as le droit de clipper : campagne rejointe (Whop, Discord du streamer) ou accord écrit.
+# Le radar automatique ne touche qu'à cette liste. Un clip d'une source absente d'ici
+# est quand même monté, mais marqué « accord à vérifier ».
+#
+# Exemple à copier (retire les # et adapte) :
+#
+# streamers:
+#   - name: ExempleStreamer
+#     twitch: exemplestreamer          # pseudo Twitch, sert au radar
+#     credit: "@exemplestreamer"       # affiché sur le clip et dans la description
+#     auto: true                       # true : le radar prend ses meilleurs clips chaque jour
+#     paid: true                       # campagne rémunérée : pense à « promotion payante » en publiant
+#     campaign: "https://whop.com/..." # pour mémoire
+#     min_views: 500
+#     layout: split                    # caméra en haut, jeu en bas
+#     facecam: {x: 0.0, y: 0.72, w: 0.24, h: 0.28}   # position de sa caméra, en fractions de l'image
+
+streamers: []
