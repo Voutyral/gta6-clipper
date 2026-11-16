@@ -1,0 +1,61 @@
+name: Diagnostic IA
+
+# Outil de mise au point : montre comment répond l'IA gratuite de GitHub depuis ce dépôt.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  models: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Appel direct, sans suivre les redirections
+        run: |
+          body='{"model":"openai/gpt-4o-mini","messages":[{"role":"user","content":"Reponds par un seul mot: bonjour"}]}'
+          echo "=== POST chat/completions"
+          curl -sS -i -m 60 -X POST https://models.github.ai/inference/chat/completions \
+            -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
+            -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
+            -d "$body" | head -c 1500 || true
+          echo
+          echo "=== GET catalog/models"
+          curl -sS -i -m 60 https://models.github.ai/catalog/models \
+            -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" | head -c 1500 || true
+          echo
+          echo "=== Même appel avec python-requests"
+          python3 - <<'EOF'
+          import os, requests
+          h = {"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}", "Accept": "application/vnd.github+json",
+               "Content-Type": "application/json"}
+          r = requests.post("https://models.github.ai/inference/chat/completions", headers=h, timeout=60,
+                            json={"model": "openai/gpt-4o-mini",
+                                  "messages": [{"role": "user", "content": "Reponds par un seul mot: bonjour"}]})
+          print("statut", r.status_code, "| url finale", r.url, "| redirections", [x.status_code for x in r.history])
+          print("type", r.headers.get("content-type"), "| corps", repr(r.text[:400]))
+          r = requests.post("https://models.github.ai/inference/chat/completions", headers=h, timeout=60,
+                            allow_redirects=False,
+                            json={"model": "openai/gpt-4o-mini",
+                                  "messages": [{"role": "user", "content": "Reponds par un seul mot: bonjour"}]})
+          print("sans redirection : statut", r.status_code, "| location", r.headers.get("location"),
+                "| corps", repr(r.text[:200]))
+          EOF
+
+      - name: Action officielle de GitHub
+        id: official
+        continue-on-error: true
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o-mini
+          prompt: "Reponds par un seul mot: bonjour"
+
+      - name: Réponse de l'action officielle
+        run: |
+          echo "resultat: ${{ steps.official.outcome }}"
+          echo "reponse: ${{ steps.official.outputs.response }}"
