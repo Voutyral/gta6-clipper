@@ -20,7 +20,7 @@ import requests
 from .util import log
 
 GEMINI = "https://generativelanguage.googleapis.com"
-_state: dict = {"gemini_model": None, "github_model": None, "off": set()}
+_state: dict = {"gemini_model": None, "github_model": None, "off": set(), "fails": {}}
 
 
 def providers(cfg: dict) -> list[str]:
@@ -199,9 +199,14 @@ def ask(cfg: dict, system: str, text: str, *, video: Path | None = None,
         elif name == "github":
             answer = _github(cfg, system, text, sheet)
         if answer:
+            _state["fails"][name] = 0
             return answer, name
+        # Un refus isolé arrive (filtre de contenu, limite passagère) : on n'écarte
+        # un fournisseur pour le reste du lancement qu'après deux échecs de suite.
+        _state["fails"][name] = _state["fails"].get(name, 0) + 1
+        if _state["fails"][name] >= 2:
+            _state["off"].add(name)
         log(f"IA « {name} » sans réponse, on passe à la suivante.")
-        _state["off"].add(name)
     return None, ""
 
 

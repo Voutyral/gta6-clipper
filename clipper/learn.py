@@ -33,11 +33,18 @@ def _is_youtube(url: str) -> bool:
 def study(url: str, question: str, cfg: dict, work: Path) -> tuple[str, str, dict]:
     """Retourne (fiche Markdown, fournisseur, infos source)."""
     work.mkdir(parents=True, exist_ok=True)
-    info = fetch.probe(url)
+    info: dict = {"title": "", "webpage_url": url, "channel": ""}
+    blocked = None
+    try:
+        info = fetch.probe(url)
+    except fetch.FetchError as exc:
+        blocked = exc   # YouTube refuse souvent les serveurs : Gemini peut quand même lire le lien
     if _is_youtube(url) and "gemini" in ai.providers(cfg):
         md, name = ai.learn(cfg, question=question, youtube_url=info.get("webpage_url") or url)
         if md:
             return md, name + " (lien YouTube lu directement)", info
+    if blocked:
+        raise blocked
     src = Path(url) if fetch.is_local(url) else fetch.download_full(url, work / "src", "watch", 480)
     dur = probe_media(src)["duration"]
     words, _ = transcribe.transcribe(src, 0.0, min(dur, 1200.0),
@@ -75,7 +82,7 @@ def run_learn(text: str, cfg: dict, base: Path) -> int:
             deliver.step_summary(msg)
             log(f"Échec : {exc} {exc.hint}")
             continue
-        title = info.get("title") or "video"
+        title = info.get("title") or url.rstrip("/").split("/")[-1] or "video"
         path = KNOWLEDGE / f"{datetime.now(timezone.utc):%Y%m%d}-{slugify(title, 50)}.md"
         header = (f"# Fiche : {title}\n\n- Source : {info.get('webpage_url') or url}\n"
                   f"- Chaîne : {info.get('channel') or 'inconnue'}\n"
