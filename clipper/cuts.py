@@ -81,5 +81,6 @@ def from_ai(raw, extract_start: float, start: float, end: float, words: list[dic
     if kept < max(float(ed.get("min_after_cuts_s", 10)), dur * float(ed.get("min_keep_ratio", 0.55))):
         log(f"Coupes de l'IA ignorées : il ne resterait que {kept:.1f} s sur {dur:.1f} s.")
         return []
-    log(f"Coupes dynamiques : {len(found)} temps mort(s) retiré(s), {dur:.1f} s → {kept:.1f} s.")
+    where = ", ".join(f"à {a - start:.1f} s (−{b - a:.1f} s)" for a, b in found)
+    log(f"Coupes dynamiques : {len(found)} temps mort(s) retiré(s), {dur:.1f} s → {kept:.1f} s ({where}).")
     return found
