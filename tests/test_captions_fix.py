@@ -115,6 +115,22 @@ def test_ai_fix_rejects_unwanted_language():
     assert not ai_fix_words(c, {"transcript": "oh my god what is that bro", "spoken_lang": "en"}, req, {})
 
 
+def test_ai_language_counts_even_when_parakeet_heard_nothing():
+    c = _cand("")
+    c.words = []                      # langue que Parakeet ne sait pas écrire
+    req = ClipRequest(url="u")
+    req.langs = ["fr"]
+    ev = {"transcript": "bhai yeh kya ho gaya delivery wala gussa", "spoken_lang": "hi"}
+    assert not ai_fix_words(c, ev, req, {})
+
+
+def test_a_few_english_words_do_not_reject_a_clip():
+    c = _cand("oh my god")
+    req = ClipRequest(url="u")
+    req.langs = ["fr"]
+    assert ai_fix_words(c, {"transcript": "oh my god", "spoken_lang": "en"}, req, {})
+
+
 def test_ai_fix_can_be_turned_off():
     c = _cand("oh la dingue rie")
     before = [w["raw"] for w in c.words]

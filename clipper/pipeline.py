@@ -242,12 +242,14 @@ def ai_fix_words(c: Candidate, ev: dict, req: ClipRequest, cap: dict) -> bool:
     Renvoie False si le passage doit être écarté (langue parlée hors de celles voulues).
     """
     spoken = str(ev.get("spoken_lang") or "").strip().lower()[:2]
+    fixed = str(ev.get("transcript") or "").strip()
     if spoken:
-        if req.langs and spoken not in req.langs and len(c.words) >= 6:
+        # Gemini entend le son lui-même : son avis vaut aussi pour les langues que Parakeet
+        # ne sait pas écrire (hindi, arabe, turc…). Deux ou trois mots isolés ne comptent pas.
+        if req.langs and spoken not in req.langs and len(fixed.split()) >= 4:
             log(f"Passage écarté : l'IA entend du « {spoken} », langues voulues {req.langs}.")
             return False
         c.lang = spoken
-    fixed = str(ev.get("transcript") or "").strip()
     if not (cap.get("ai_fix", True) and fixed and c.words):
         return True
     new, ratio, edits = wordfix.align(c.words, fixed)
@@ -279,6 +281,9 @@ def plan_candidates(cands: list[Candidate], req: ClipRequest, info: dict, cfg: d
             engine=cap.get("engine", "parakeet"), vocab=words_vocab, cfg=cfg)
         if req.langs and c.lang and c.lang not in req.langs and len(c.words) >= 6:
             log(f"Passage écarté : on y parle « {c.lang} », langues voulues {req.langs}.")
+            continue
+        if req.langs and not c.lang and len(c.words) >= 3 and not use_ai:
+            log("Passage écarté : langue impossible à vérifier sans IA.")
             continue
         db = detect.energy_profile(c.src, hop=0.1, ss=c.start, dur=dur)
         peaks = [c.start + p for p in detect.find_peaks(db, 0.1, int(cfg["edit"]["max_punches"]))]

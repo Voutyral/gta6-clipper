@@ -339,7 +339,7 @@ def evaluate(cfg: dict, *, text: str, dur: float, peak: float | None, title: str
     if data is not None:
         log(f"IA « {name} » : score {data.get('score')}, accroche « {data.get('hook')} », "
             f"coupe {data.get('start')} → {data.get('end')} s, risques {data.get('risks')}, "
-            f"webcam {data.get('facecam')}")
+            f"webcam {data.get('facecam')}, langue parlée « {data.get('spoken_lang') or '?'} »")
     return data, (name if data is not None else "")
 
 
