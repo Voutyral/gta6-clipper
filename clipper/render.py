@@ -98,15 +98,16 @@ def layout_chain(src: str, out: str, layout: str, ed: dict, preset: dict, fps_s:
         return (f"[{src}]split=2[c{tag}][g{tag}];"
                 f"[c{tag}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*{x:.4f}:ih*{y:.4f},"
                 f"scale={W}:{cam_h}:force_original_aspect_ratio=increase:flags=lanczos,"
-                f"crop={W}:{cam_h}[cc{tag}];"
+                f"crop={W}:{cam_h},unsharp=5:5:0.45:5:5:0[cc{tag}];"
                 f"[g{tag}]scale=-2:{game_h}:flags=lanczos,crop={W}:{game_h}:'{game_x(x, w)}':0[gg{tag}];"
                 f"[cc{tag}][gg{tag}]vstack=inputs=2,{tail}")
-    zoom = max(1.0, float(ed.get("zoom", 1.25)))
+    zoom = max(1.0, float(ed.get("zoom", 1.5)))
     fg_w = int(round(W * zoom / 2) * 2)
+    sharp = ",unsharp=5:5:0.4:5:5:0" if zoom > 1.3 else ""
     return (f"[{src}]split=2[b{tag}][f{tag}];"
             f"[b{tag}]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,"
             f"gblur=sigma=9,scale={W}:{H}:flags=bilinear,eq=brightness=-0.12[bb{tag}];"
-            f"[f{tag}]scale={fg_w}:-2:flags=lanczos,crop='min(iw,{W})':ih[ff{tag}];"
+            f"[f{tag}]scale={fg_w}:-2:flags=lanczos,crop='min(iw,{W})':ih{sharp}[ff{tag}];"
             f"[bb{tag}][ff{tag}]overlay=(W-w)/2:(H-h)/2-30,{tail}")
 
 
@@ -304,7 +305,9 @@ def _render(plan: Plan, out: Path, cfg: dict, workdir: Path, flags: set) -> dict
         fc.append("".join(f"[{x}]" for x in mix)
                   + f"amix=inputs={len(mix)}:duration=first:dropout_transition=0:normalize=0[mix]")
         last_a = "mix"
-    fc.append(f"[{last_a}]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[a]")
+    voice = ("acompressor=threshold=0.089:ratio=3:attack=8:release=180:makeup=1.6,"
+             if ed.get("voice_boost", True) and not raw else "")
+    fc.append(f"[{last_a}]{voice}loudnorm=I=-14:TP=-1.5:LRA={int(ed.get('lra', 7))},aresample=48000[a]")
 
     # Débit plafonné : le fichier reste sous 50 Mo, léger à télécharger au téléphone.
     kbps = max(2500, min(9000, int(46 * 8192 / max(total, 1.0)) - 180))

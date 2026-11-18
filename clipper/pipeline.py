@@ -154,6 +154,20 @@ def snap_to_words(start: float, end: float, words: list[dict], lo: float, hi: fl
     return start, end
 
 
+def skip_black(c: Candidate, start: float, end: float) -> float:
+    """Un clip ne commence jamais sur un écran noir (chargement, fondu) : la première image accroche."""
+    lead = detect.black_lead(c.src, start, min(4.0, max(0.0, end - start)))
+    if lead < 0.15:
+        return start
+    first = next((w["s"] for w in c.words if start <= w["s"] < start + lead), None)
+    if first is not None:   # quelqu'un parle déjà pendant le noir : on garde sa phrase entière
+        lead = max(0.0, first - start - 0.1)
+    if lead < 0.15 or end - (start + lead) < 8.0:
+        return start
+    log(f"Début noir retiré : {lead:.1f} s.")
+    return start + lead
+
+
 def text_lang(req: ClipRequest, preset: dict, cfg: dict, spoken: str = "") -> str:
     """Langue des textes d'un clip (accroche, titre, légende).
 
@@ -271,10 +285,17 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
         game = game or str(ev.get("game") or "").strip()
     if not c.locked:
         start, end = snap_to_words(start, end, c.words, c.start, c.end)
-    plan_cuts = []
-    if ev and "nocut" not in req.flags:
-        plan_cuts = cuts.from_ai(ev.get("cuts"), c.start, start, end, c.words, cfg["edit"])
+        start = skip_black(c, start, end)
     flags = set(req.flags)
+    plan_cuts = []
+    if ev and "nocut" not in flags:
+        plan_cuts = cuts.from_ai(ev.get("cuts"), c.start, start, end, c.words, cfg["edit"])
+    # Méthode du monteur : on resserre aussi les silences où il ne se passe rien (son calme, image
+    # immobile), que l'IA n'a pas signalés. Désactivable par streamer (`tighten: off`).
+    if "nocut" not in flags and cfg["edit"].get("jump_cuts", True) and cuts.tighten_on(cfg["edit"], preset):
+        plan_cuts = cuts.tighten(c.src, start, end, c.words, cfg["edit"], plan_cuts)
+    if ev and ev.get("captions_on_screen") is True:
+        flags.add("nosub")   # le stream affiche déjà ses sous-titres : pas de deuxième ligne par-dessus
     # Moment d'histoire permis par une campagne : alerte sur la couverture, rien de dévoilé,
     # et pas d'aperçu du moment fort en ouverture (il révélerait la chute dès la première image).
     spoiler = bool(preset.get("story_ok")) and "spoiler" in risks
@@ -421,6 +442,16 @@ def process_request(req: ClipRequest, cfg: dict, streamers: list[dict], work: Pa
         for p in low:
             log(f"Passage écarté : note IA {p.ai_score:g} sous le seuil {req.min_score:g} ({p.what}).")
         plans = [p for p in plans if p not in low]
+        # Chasse automatique : un passage que le contrôle refusera de toute façon n'est pas monté
+        # (une minute gagnée par refus, donc plus de candidats essayés dans le même passage).
+        allow = {"spoiler"} if preset.get("story_ok") else set()
+        block = {str(r) for r in preset.get("strict_risks") or []}
+        doomed = [p for p in plans if any(r not in allow and (r in qc.RISK_LABELS or r in block)
+                                          for r in p.risks or [])]
+        for p in doomed:
+            why = ", ".join(qc.RISK_LABELS.get(r, r) for r in p.risks if r not in allow)
+            log(f"Passage écarté avant montage : {why} ({p.what}).")
+        plans = [p for p in plans if p not in doomed]
     results: list[Result] = []
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     for k, plan in enumerate(plans):

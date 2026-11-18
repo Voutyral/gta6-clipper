@@ -33,7 +33,8 @@ streamers:
     music: off                         # son clair : pas de musique ajoutée
     sfx: off                           # « ne couvre pas sa meilleure réplique avec un bruitage »
     teaser: off                        # mise en place, pause, chute : rien de dévoilé en ouverture
-    strict_risks: [musique]            # chanson sous licence bien audible : refusée (hors de sa permission)
+    tighten: off                       # « laisse respirer le moment » : seules les coupes de l'IA, qui suit le brief
+    strict_risks: [musique, explicite]   # campagne : ni chanson sous licence, ni nudité (règles de TikTok et Content Rewards)
     detection: {clip_min_s: 20, clip_max_s: 60}   # format conseillé : 20 à 60 secondes
     hashtags: ["#ad", "#dasgasdom3", "#GTA6", "#GTAVI"]
     caption_lines:                     # ajouté à la légende : crédit et lien exigés par la campagne

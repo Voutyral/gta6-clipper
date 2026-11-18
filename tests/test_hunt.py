@@ -118,7 +118,7 @@ def test_rank_boosts_allowlisted_streamers():
                        cfg, streamers, {}, now=NOW)
     assert ranked[0][1].streamer == "zed" and "streamer suivi" in ranked[0][3]
     req = hunt.to_request(ranked[0][1], ranked[0][2], cfg)
-    assert req.credit == "@ZedTV" and req.min_score == 6 and req.langs is None
+    assert req.credit == "@ZedTV" and req.min_score == cfg["hunt"]["min_ai_score"] and req.langs is None
     assert req.meta["views"] == 400 and req.game_hint == "Grand Theft Auto VI"
 
 

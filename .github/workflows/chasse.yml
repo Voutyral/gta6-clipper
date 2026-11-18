@@ -1,18 +1,18 @@
 name: Chasseur de clips
 
-# Trois fois par jour : clips les plus regardés du moment (Twitch, Kick, streamers suivis),
+# Toutes les 2 heures : clips les plus regardés du moment (Twitch, Kick, streamers suivis),
 # montage des meilleurs, galerie mise à jour, et une issue pour te prévenir.
-# Heures UTC : 05:17, 11:17, 17:17 (12:17, 18:17, 00:17 au Laos ; 06:17, 12:17, 18:17 à Paris en hiver).
-# GitHub retarde ou saute parfois un lancement programmé : deux créneaux de secours suivent
-# chaque chasse, et ne font rien si une chasse programmée a réussi dans les 2 h 30 précédentes.
-# Les 19 et 20 novembre (stream GTA 6 de Dasgas Dom, campagne RUCKUS) : un passage toutes les
-# 2 heures en plus, réservé aux streamers en campagne de streamers.yaml.
+# Heures UTC : 01:17, 03:17… 23:17 (08:17, 10:17… au Laos). GitHub lance les tâches programmées
+# de ce dépôt avec plusieurs heures de retard, mais leur rythme reste à peu près le même ; un
+# lancement arrivé moins de 80 minutes après une autre chasse réussie ne fait rien.
+# Les 19 et 20 novembre (stream GTA 6 de Dasgas Dom, campagne RUCKUS) : la veille des lives lance
+# aussi des chasses réservées aux streamers en campagne, dès le début du live puis toutes les heures.
+# Nom affiché du lancement : la porte d'entrée ci-dessous ne compte que les chasses normales.
+run-name: ${{ github.event.inputs.campaign_only == 'true' && 'Chasse de campagne' || 'Chasseur de clips' }}
+
 on:
   schedule:
-    - cron: "17 5,11,17 * * *"
-    - cron: "52 5,11,17 * * *"
-    - cron: "37 6,12,18 * * *"
-    - cron: "17 1,3,7,9,13,15,19,21,23 19,20 11 *"
+    - cron: "17 */2 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -45,19 +45,23 @@ jobs:
     outputs:
       skip: ${{ steps.recent.outputs.skip }}
     steps:
-      - name: Une chasse programmée vient-elle de passer ?
+      - name: Une chasse vient-elle de passer ?
         id: recent
-        # Seuls les créneaux de secours attendent : les chasses normales et de campagne partent toujours.
-        if: github.event_name == 'schedule' && (github.event.schedule == '52 5,11,17 * * *' || github.event.schedule == '37 6,12,18 * * *')
+        # Lancements programmés seulement (GitHub en livre parfois plusieurs d'un coup, en retard) :
+        # rien à faire si une chasse normale a réussi il y a moins de 80 minutes. Les chasses de
+        # campagne (veille des lives) ne comptent pas : le jour du stream, les deux tournent.
+        # Les chasses lancées à la main ou par la veille partent toujours.
+        if: github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/chasse.yml/runs?event=schedule&status=success&per_page=6" \
+          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/chasse.yml/runs?status=success&per_page=8" \
                 --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }})
-                       | select((now - (.created_at | fromdateiso8601)) < 9000)] | length")
+                       | select(.display_title != \"Chasse de campagne\")
+                       | select((now - (.created_at | fromdateiso8601)) < 4800)] | length")
           if [ "${n:-0}" -gt 0 ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Créneau de secours : une chasse a déjà réussi il y a moins de 2 h 30, rien à faire." >> "$GITHUB_STEP_SUMMARY"
+            echo "Une chasse a déjà réussi il y a moins de 80 minutes : rien à faire." >> "$GITHUB_STEP_SUMMARY"
           fi
 
   hunt:
@@ -70,7 +74,7 @@ jobs:
       GITHUB_TOKEN: ${{ github.token }}
       DRY_RUN: ${{ github.event.inputs.dry_run }}
       MAX_CLIPS: ${{ github.event.inputs.max }}
-      CAMPAIGN_ONLY: ${{ github.event.schedule == '17 1,3,7,9,13,15,19,21,23 19,20 11 *' || github.event.inputs.campaign_only == 'true' }}
+      CAMPAIGN_ONLY: ${{ github.event.inputs.campaign_only == 'true' }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       YTDLP_PROXY: ${{ secrets.YTDLP_PROXY }}

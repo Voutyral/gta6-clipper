@@ -12,7 +12,7 @@ from .util import probe_media
 RISK_LABELS = {
     "cinematique": "cinématique du jeu isolée (Rockstar les fait retirer)",
     "spoiler": "révélation majeure de l'histoire (Rockstar les fait retirer)",
-    "explicite": "contenu explicite ou propos haineux : interdit sur TikTok et YouTube",
+    "haine": "propos haineux (insultes racistes ou homophobes) : retiré par TikTok et YouTube",
     "bande_annonce": "bande-annonce, vidéo officielle ou fuite au lieu du jeu en direct",
 }
 ALLOWED_NOTES = {   # risques permis par une campagne : signalés, sans bloquer
@@ -21,6 +21,9 @@ ALLOWED_NOTES = {   # risques permis par une campagne : signalés, sans bloquer
 RISK_NOTES = {
     "violence_debut": "violence graphique dans les 7 premières secondes : pas de pub sur ce clip",
     "musique": "musique sous licence audible : risque de réclamation",
+    # Choix de Léo (19/11) : la nudité ne bloque plus les clips normaux, elle est signalée. Les
+    # campagnes la refusent (`strict_risks`), et les propos haineux restent bloqués partout.
+    "explicite": "nudité ou contenu sexuel : TikTok le retire, YouTube le réserve aux adultes",
 }
 
 

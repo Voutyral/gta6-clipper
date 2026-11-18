@@ -37,10 +37,16 @@ edit:
   auto_facecam: true                # l'IA repère la webcam du streamer : caméra en haut, jeu en bas
   jump_cuts: true                   # l'IA retire les temps morts à l'intérieur du clip (montage plus nerveux)
   jump_zoom: 1.07                   # léger zoom un morceau sur deux, pour marquer chaque coupe
-  max_cuts: 6
+  max_cuts: 10                      # coupes proposées par l'IA gardées au plus
+  tighten: true                     # et en plus : silences raccourcis là où il ne se passe rien
+  tighten_gap_s: 0.75               # silence entre deux phrases à partir duquel on raccourcit
+  tighten_leave_s: 0.25             # souffle laissé à chaque coupe
+  tighten_motion: 5.0               # au-delà, l'image bouge (action) : on ne coupe pas
+  tighten_max: 8
+  tighten_max_share: 0.25           # jamais plus d'un quart du clip retiré de cette façon
   min_after_cuts_s: 10              # jamais moins de 10 s une fois coupé
   min_keep_ratio: 0.55              # et jamais moins de 55 % du passage choisi
-  zoom: 1.25                        # zoom du jeu en mise en page blur
+  zoom: 1.5                         # jeu sans webcam : 1.5 = jeu sur la moitié de l'écran, moins de flou
   teaser: auto                      # aperçu du moment fort en ouverture : auto | on | off
   teaser_s: 1.8
   punch: true                       # zoom et secousse brefs sur chaque impact
@@ -52,6 +58,7 @@ edit:
   music: auto                       # joue une piste de assets/music si le dossier en contient
   music_gain_db: -21
   hook_seconds: 3.5
+  voice_boost: true                 # voix compressée doucement : plus claire au téléphone
   credit_prefix: "Clip :"
 
 captions:
@@ -82,11 +89,12 @@ youtube:
 
 hunt:                               # le chasseur : trouve tout seul les clips du moment
   enabled: true
-  max_per_run: 4                    # clips montés par passage (3 passages par jour)
+  max_per_run: 6                    # clips montés par passage (un passage toutes les 2 heures)
+  max_per_day: 60                   # plafond du jour hors campagne (les clips de campagne passent toujours)
   campaign_max_per_run: 5           # quand une campagne de streamers.yaml a des clips à monter
-  max_candidates: 8                 # clips essayés au maximum par passage
+  max_candidates: 16                # clips essayés au maximum par passage (les refus sont écartés avant montage)
   mix_languages: true               # alterne français et anglais (sinon l'anglais, plus vu, prend tout)
-  min_ai_score: 6                   # note minimale de Gemini (sur 10) pour garder un clip
+  min_ai_score: 4                   # note minimale (sur 10) : n'écarte que ce qui ne montre pas le jeu ou ne se comprend pas
   game_boost:                       # jeux à privilégier : leur score est multiplié
     "Grand Theft Auto VI": 3
   min_views: 150                    # vues voulues sur le clip d'origine
@@ -104,15 +112,15 @@ hunt:                               # le chasseur : trouve tout seul les clips d
     enabled: true
     games: ["Grand Theft Auto VI", "Grand Theft Auto V"]
     languages: [fr, en]             # une recherche par langue ; retire en pour revenir au français seul
-    per_game: 30
+    per_game: 50                    # clips lus par jeu et par langue
   kick:
     enabled: true
     categories: [grand-theft-auto-vi, grand-theft-auto-v]
 
 gallery:
   days: 7                           # clips gardés dans la galerie (les releases durent 7 jours)
-  max_clips: 40
+  max_clips: 60
   max_mb: 900                       # GitHub Pages refuse plus de 1 Go : les plus anciens restent dehors
   hide:                             # clips à ne jamais montrer (nom du fichier, sans .mp4)
     - 20261118-030954-suryanshexd-00   # stream en hindi, sans GTA à l'image
-  schedule_utc: ["05:17", "11:17", "17:17"]   # à garder identique à la ligne cron de chasse.yml
+  schedule_utc: ["01:17", "03:17", "05:17", "07:17", "09:17", "11:17", "13:17", "15:17", "17:17", "19:17", "21:17", "23:17"]   # comme la ligne cron de chasse.yml

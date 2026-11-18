@@ -64,8 +64,9 @@ def normalize_words(words: list[dict], dur: float) -> list[dict]:
             continue
         s = min(max(0.0, float(w["s"])), dur)
         e = min(max(s + 0.04, float(w["e"])), dur + 0.3)
+        end_char = w["raw"].rstrip()[-1:]
         out.append({"raw": w["raw"], "w": disp, "s": s, "e": e, "p": float(w.get("p", 1.0)),
-                    "eos": w["raw"].rstrip()[-1:] in ".!?…"})
+                    "eos": end_char in ".!?…", "brk": end_char in ",;:"})
     for i in range(1, len(out)):
         if out[i]["s"] < out[i - 1]["s"]:
             out[i]["s"] = out[i - 1]["s"]
@@ -75,22 +76,65 @@ def normalize_words(words: list[dict], dur: float) -> list[dict]:
     return out
 
 
+# Petits mots qui annoncent la suite (article, préposition, conjonction, sujet, « c'est ») :
+# un groupe de sous-titres ne finit pas dessus, ils passent au début du groupe suivant.
+# « RUN OUT » puis « THE DOOR », et pas « RUN OUT THE » puis « DOOR ».
+WEAK = {
+    "le", "la", "les", "l'", "un", "une", "des", "du", "de", "d'", "au", "aux", "à", "et", "ou", "mais",
+    "donc", "car", "ni", "que", "qu'", "qui", "si", "je", "j'", "tu", "il", "on", "ils", "ce", "c'",
+    "ne", "n'", "se", "s'", "me", "m'", "te", "t'", "mon", "ma", "mes", "ton", "ta", "tes", "son", "sa",
+    "ses", "notre", "votre", "nos", "vos", "leurs", "pour", "par", "sur", "sous", "dans", "avec",
+    "sans", "chez", "vers", "en", "est", "suis", "sont", "c'est", "j'ai", "j'suis", "t'as", "t'es",
+    "y'a", "c'était", "the", "a", "an", "to", "of", "in", "at", "for", "with", "from", "by",
+    "into", "and", "but", "or", "so", "if", "i", "he", "she", "we", "they", "my", "your", "his",
+    "our", "their", "is", "are", "was", "were", "i'm", "it's", "that's", "there's", "you're",
+    "we're", "they're", "gonna", "wanna", "gotta",
+}
+
+
+def _weak(word: dict) -> bool:
+    return word["w"].lower().replace("’", "'") in WEAK and not (word.get("eos") or word.get("brk"))
+
+
 def group_words(words: list[dict], max_words: int = 3, max_chars: int = 14,
                 max_gap: float = 0.7) -> list[list[dict]]:
-    """Petits groupes lisibles d'un coup d'œil, coupés aux silences et aux fins de phrase."""
+    """Petits groupes lisibles d'un coup d'œil : coupés aux silences, aux fins de phrase et aux
+    virgules, et jamais sur un petit mot qui annonce la suite."""
     groups: list[list[dict]] = []
     cur: list[dict] = []
     for w in words:
         if cur:
             chars = sum(len(x["w"]) for x in cur) + len(cur) + len(w["w"])
-            if (len(cur) >= max_words or chars > max_chars or w["s"] - cur[-1]["e"] > max_gap
-                    or cur[-1].get("eos")):
+            pause = w["s"] - cur[-1]["e"] > max_gap or cur[-1].get("eos") or cur[-1].get("brk")
+            if pause:
                 groups.append(cur)
                 cur = []
+            elif len(cur) >= max_words or chars > max_chars:
+                carry = [cur.pop()] if len(cur) >= 2 and _weak(cur[-1]) else []
+                groups.append(cur)
+                cur = carry
         cur.append(w)
     if cur:
         groups.append(cur)
     return groups
+
+
+def balanced(text: str, width: int) -> list[str]:
+    """Une ligne si le texte tient, sinon deux lignes de longueurs proches (« GOOD NEWS / AND BAD NEWS »),
+    la première ne finissant pas sur un petit mot. Plus long : découpe habituelle."""
+    words = text.split()
+    text = " ".join(words)   # un emoji retiré laisse un double espace
+    if len(text) <= width or len(words) < 2:
+        return [text] if text else []
+    best = None
+    for i in range(1, len(words)):
+        a, b = " ".join(words[:i]), " ".join(words[i:])
+        if len(a) > width or len(b) > width:
+            continue
+        cost = abs(len(a) - len(b)) + (12 if words[i - 1].lower().replace("’", "'") in WEAK else 0)
+        if best is None or cost < best[0]:
+            best = (cost, [a, b])
+    return best[1] if best else wrap(text, width, 2)
 
 
 def wrap(text: str, width: int, max_lines: int = 3) -> list[str]:
@@ -148,7 +192,7 @@ def build_ass(words: list[dict], *, hook: str, context: str, credit: str, total:
     ed = cfg["edit"]
     lines = [HEADER.format(hook_box=cfg["captions"].get("highlight", "&H0000E5FF"))]
     hook_end = min(total, hook_until if hook_until is not None else float(ed.get("hook_seconds", 3.5)))
-    hook_lines = wrap(esc(strip_emoji(hook).upper()), 18, 2) if hook else []
+    hook_lines = balanced(esc(strip_emoji(hook).upper()), 18) if hook else []
     top = 190
     if hook_lines:
         place = ""

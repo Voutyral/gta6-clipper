@@ -99,7 +99,8 @@ def brief_for_ai(preset: dict | None) -> str:
         parts.append("Moments d'histoire voulus (mort d'un personnage, révélation) : mets le risque "
                      "\"spoiler\" et ne révèle rien dans l'accroche ni dans le titre (aucun nom, aucun événement).")
     parts.append("Contenu sexuel explicite, nudité, insultes haineuses ou propos qui enfreignent les règles "
-                 "de TikTok ou YouTube : risque \"explicite\" et note 2 au plus. Une blague d'adulte légère "
+                 "de TikTok ou YouTube : risque \"explicite\" (\"haine\" pour les insultes haineuses) et note "
+                 "2 au plus. Une blague d'adulte légère "
                  "passe si TikTok l'accepte.")
     parts.append("Bande-annonce, vidéo officielle, fuite ou autre stream que celui de la source : risque "
                  "\"bande_annonce\" et note 0.")

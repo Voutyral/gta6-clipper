@@ -130,3 +130,43 @@ def find_peaks(db: np.ndarray, hop: float, max_n: int = 3, min_gap: float = 4.0,
         peaks.append(j * hop)
         work[max(0, i - gap): i + gap + 1] = -1.0
     return peaks
+
+
+def motion_profile(path: str | Path, ss: float, dur: float, fps: float = 10.0,
+                   w: int = 64, h: int = 36) -> np.ndarray:
+    """Mouvement à l'image : écart moyen (0 à 255) entre deux images successives, `fps` fois par seconde.
+
+    Calculé sur une image réduite en gris : quelques secondes pour un clip entier.
+    """
+    cmd = ["ffmpeg", "-v", "error", "-nostdin", "-ss", f"{ss:.3f}", "-t", f"{dur:.3f}", "-i", str(path),
+           "-an", "-vf", f"fps={fps:g},scale={w}:{h}:flags=area,format=gray", "-f", "rawvideo", "-"]
+    try:
+        p = subprocess.run(cmd, capture_output=True, timeout=300, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return np.zeros(0, dtype=np.float32)
+    raw = np.frombuffer(p.stdout or b"", dtype=np.uint8)
+    n = len(raw) // (w * h)
+    if n < 2:
+        return np.zeros(0, dtype=np.float32)
+    frames = raw[: n * w * h].reshape(n, h, w).astype(np.float32)
+    diff = np.abs(np.diff(frames, axis=0)).mean(axis=(1, 2))
+    return np.concatenate([diff[:1], diff]).astype(np.float32)
+
+
+def black_lead(path: str | Path, ss: float, dur: float = 4.0) -> float:
+    """Secondes d'écran noir au tout début de [ss, ss + dur] (chargement, fondu) ; 0 sinon."""
+    cmd = ["ffmpeg", "-v", "info", "-nostdin", "-hide_banner", "-ss", f"{ss:.3f}", "-t", f"{dur:.3f}",
+           "-i", str(path), "-an", "-vf", "blackdetect=d=0.1:pix_th=0.08:pic_th=0.97", "-f", "null", "-"]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=120, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return 0.0
+    for line in (p.stderr or "").splitlines():
+        if "black_start:" in line:
+            try:
+                start = float(line.split("black_start:")[1].split()[0])
+                end = float(line.split("black_end:")[1].split()[0])
+            except (IndexError, ValueError):
+                continue
+            return end if start < 0.05 else 0.0
+    return 0.0
