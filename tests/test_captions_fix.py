@@ -136,3 +136,24 @@ def test_ai_fix_can_be_turned_off():
     before = [w["raw"] for w in c.words]
     ai_fix_words(c, {"transcript": "oh la dinguerie"}, ClipRequest(url="u"), {"ai_fix": False})
     assert [w["raw"] for w in c.words] == before
+
+
+def test_correction_that_cannot_be_said_in_time_keeps_what_was_heard():
+    heard = _words("attends il est tombé le pont", t0=0.0, step=0.15)   # débit rapide, pas de silence
+    fixed, _, edits = wordfix.align(heard, "attends OK ouais hé derrière derrière derrière le pont tombé le pont")
+    assert [w["w"] for w in fixed][:4] == ["ATTENDS", "IL", "EST", "TOMBÉ"]
+    assert all(b["s"] - a["s"] >= 0.04 for a, b in zip(fixed, fixed[1:], strict=False))
+
+
+def test_longer_correction_uses_the_following_pause():
+    heard = _words("mon pac", t0=0.0, step=0.3) + _words("ouais", t0=2.0)
+    fixed, _, _ = wordfix.align(heard, "mon pack de bières ouais")
+    assert [w["w"] for w in fixed] == ["MON", "PACK", "DE", "BIÈRES", "OUAIS"]
+    assert fixed[3]["e"] <= 2.0
+    assert all(w["e"] - w["s"] >= 0.1 for w in fixed[1:4])     # lisibles, pas un éclair
+
+
+def test_words_before_the_first_heard_word_need_room():
+    heard = _words("mon pac ouais", t0=0.0)
+    fixed, _, _ = wordfix.align(heard, "dommage que mon pac ouais")
+    assert [w["w"] for w in fixed] == ["MON", "PAC", "OUAIS"]
