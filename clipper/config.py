@@ -75,6 +75,7 @@ DEFAULTS: dict = {
         "max_candidates": 6,
         "min_ai_score": 6,
         "min_views": 150,
+        "min_views_floor": 40,
         "max_age_hours": 30,
         "min_duration_s": 8,
         "max_duration_s": 120,

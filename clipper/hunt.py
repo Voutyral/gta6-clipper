@@ -19,6 +19,7 @@ from .config import ROOT, match_streamer
 from .pipeline import Result, deliver_result, process_request
 from .request import ClipRequest
 from .sources import Found, discover
+from .transcribe import guess_language
 from .util import log
 
 SEEN = ROOT / "state" / "seen.json"
@@ -89,7 +90,11 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
         if hc.get("allowlist_only") and not preset:
             drop("hors streamers.yaml")
             continue
-        if f.views < int(preset.get("min_views", hc.get("min_views", 150))):
+        # Vues : `min_views` est le seuil voulu. Les jours calmes, la chasse descend jusqu'au
+        # plancher `min_views_floor`, mais ces clips passent après ceux qui dépassent le seuil.
+        wanted_views = int(preset.get("min_views", hc.get("min_views", 150)))
+        floor = min(wanted_views, int(hc.get("min_views_floor", wanted_views)))
+        if f.views < floor:
             drop("pas assez de vues")
             continue
         if f.age_hours(now) > float(hc.get("max_age_hours", 30)):
@@ -102,17 +107,25 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
         # Vues par heure, avec un amortissement pour ne pas surestimer les clips de dix minutes.
         score = f.views / (f.age_hours(now) + 2.0) ** 0.8
         why = f"{f.views} vues en {f.age_hours(now):.0f} h"
+        if f.views < wanted_views:
+            why += ", peu de vues"
         if preset:
             score *= float(hc.get("allowlist_boost", 2.0))
             why += ", streamer suivi"
         elif wanted_langs and not f.language:
-            why += ", langue à vérifier"   # Kick : vérifiée seulement après téléchargement
+            # Kick ne donne pas la langue : un titre clairement dans une autre langue suffit à écarter,
+            # sinon elle est vérifiée après téléchargement (Gemini écoute le son).
+            guess = guess_language([{"raw": w} for w in f.title.split()])
+            if guess and guess not in wanted_langs:
+                drop("titre dans une autre langue")
+                continue
+            why += ", langue à vérifier"
         elif wanted_langs and f.language not in wanted_langs:
             drop("autre langue")
             continue
         out.append((score, f, preset, why))
-    # Langue connue d'abord : un clip dont la langue reste à vérifier ne passe qu'en dernier.
-    out.sort(key=lambda t: ("langue à vérifier" in t[3], -t[0]))
+    # Langue connue d'abord, puis les clips au dessus du seuil de vues, puis la vitesse.
+    out.sort(key=lambda t: ("langue à vérifier" in t[3], "peu de vues" in t[3], -t[0]))
     cap = int(hc.get("max_per_streamer_day", 2))
     unknown_cap = int(hc.get("max_unknown_language", 1))
     picked, count, unknown = [], {}, 0

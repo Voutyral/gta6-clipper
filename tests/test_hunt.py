@@ -74,14 +74,27 @@ def test_rank_prefers_fast_risers_and_applies_filters():
     clips = [
         found(1, views=600, hours=20),                    # beaucoup de vues mais vieux
         found(2, views=400, hours=1, streamer="alice"),   # récent qui décolle
-        found(3, views=90, hours=1, streamer="carl"),     # trop peu de vues
+        found(3, views=90, hours=1, streamer="carl"),     # sous le seuil : passe après les autres
+        found(8, views=20, hours=1, streamer="gus"),      # sous le plancher : écarté
         found(4, views=900, hours=2, streamer="dan", title="GTA 6 ENDING spoiler"),
         found(5, views=900, hours=2, streamer="eve", dur=200),
         found(6, views=900, hours=2, streamer="fred", lang="en"),   # mauvaise langue
         found(7, views=800, hours=2, streamer="seen"),
     ]
     ranked = hunt.rank(clips, cfg, [], {"twitch:c7": {"d": "2026-11-20", "s": "seen", "ok": True}}, now=NOW)
-    assert [f.id for _, f, _, _ in ranked] == ["c2", "c1"]
+    assert [f.id for _, f, _, _ in ranked] == ["c2", "c1", "c3"]
+    assert "peu de vues" in ranked[2][3]
+
+
+def test_kick_title_in_another_language_is_dropped_before_download():
+    cfg = load_config()
+    clips = [found(1, views=900, hours=2, streamer="saab", lang="", platform="kick",
+                   title="Dawson sees Chatty's missed calls to Ray Mond and the boys"),
+             found(2, views=900, hours=2, streamer="momo", lang="", platform="kick", title="OH LA DINGUERIE")]
+    stats: dict = {}
+    ranked = hunt.rank(clips, cfg, [], {}, now=NOW, stats=stats)
+    assert [f.streamer for _, f, _, _ in ranked] == ["momo"]
+    assert stats == {"titre dans une autre langue": 1}
 
 
 def test_rank_caps_per_streamer_and_unknown_language():
