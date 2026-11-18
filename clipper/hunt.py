@@ -184,8 +184,9 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
     report = hunt_report(results, skipped, errors, source_errors)
     deliver.step_summary("## Chasse aux clips\n\n" + report)
     if results:
+        # Sans galerie, les anciennes issues restent ouvertes : ce sont les seuls liens vers les clips.
         deliver.open_issue(f"🎬 {len(results)} clip(s) prêt(s) à poster", report, label="chasse",
-                           close_previous=True)
+                           close_previous=bool(deliver.pages_url()))
     deliver.cleanup_releases(int(cfg["delivery"].get("keep_days", 7)))
     return 0
 
