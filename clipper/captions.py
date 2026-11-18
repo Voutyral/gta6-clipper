@@ -143,7 +143,7 @@ def build_ass(words: list[dict], *, hook: str, context: str, credit: str, total:
     """Fichier ASS complet : accroche, ligne de contexte, crédit, sous-titres mot à mot.
 
     `hook_pos` centre l'accroche ailleurs qu'en haut (à la jointure en mise en page « split »).
-    `cta` : appel à l'action d'une campagne (« SUBSCRIBE TO TOMO »), affiché les dernières secondes.
+    `cta` : appel à l'action d'une campagne (« SUBSCRIBE ON YOUTUBE »), affiché les dernières secondes.
     """
     ed = cfg["edit"]
     lines = [HEADER.format(hook_box=cfg["captions"].get("highlight", "&H0000E5FF"))]

@@ -11,10 +11,10 @@ UTC = timezone.utc
 STREAMERS = load_streamers()
 DOM = next(s for s in STREAMERS if s.get("kick") == "dasgasd3m")
 # Exemple de campagne YouTube (plus dans streamers.yaml) : appel à l'action et hashtags variés.
-TOMO = {"name": "Tomo", "youtube": "@Tomovids", "credit": "@Tomovids", "language": "en",
-        "cta": "SUBSCRIBE TO TOMO ON YOUTUBE", "hashtags": ["#ad", "#tomovids", "#gta6"],
-        "hashtags_mix": ["#tomo", "#gtavi", "#gta", "#gaming", "#funnymoments"],
-        "campaign": {"name": "Tomo GTA VI", "footage_from": "2026-11-19T00:00:00-05:00",
+YT = {"name": "Exemple", "youtube": "@ExempleChaine", "credit": "@ExempleChaine", "language": "en",
+        "cta": "SUBSCRIBE TO YT ON YOUTUBE", "hashtags": ["#ad", "#exemplechaine", "#gta6"],
+        "hashtags_mix": ["#exemple", "#gtavi", "#gta", "#gaming", "#funnymoments"],
+        "campaign": {"name": "Exemple GTA VI", "footage_from": "2026-11-19T00:00:00-05:00",
                      "games": ["Grand Theft Auto VI"], "vod_clips": 4}}
 T0 = datetime(2026, 11, 19, 14, 0, tzinfo=UTC)
 
@@ -44,7 +44,7 @@ def test_watch_only_follows_campaigns_with_an_open_window():
     assert names(datetime(2026, 11, 18, 12, 0, tzinfo=UTC)) == []       # trop tôt
     assert names(T0) == ["Dasgas Dom"]
     assert names(datetime(2026, 11, 23, tzinfo=UTC)) == []               # le stream du 19 de Dom est loin
-    assert [s["name"] for s in live.watched([TOMO], datetime(2026, 11, 23, tzinfo=UTC))] == ["Tomo"]
+    assert [s["name"] for s in live.watched([YT], datetime(2026, 11, 23, tzinfo=UTC))] == ["Exemple"]
 
 
 def test_kick_replays_are_read(monkeypatch):
@@ -58,15 +58,15 @@ def test_kick_replays_are_read(monkeypatch):
     assert v.created_at == datetime(2026, 11, 19, 14, 0, tzinfo=UTC)        # heure Kick sans fuseau = UTC
 
 
-def test_youtube_lives_of_tomo_are_listed(monkeypatch):
+def test_youtube_lives_are_listed(monkeypatch):
     from clipper import fetch
     monkeypatch.setattr(fetch, "list_entries", lambda url, limit=8, extra=None: [
         {"id": "abc", "title": "GTA 6 DAY 1 - FIRST TIME PLAYING", "duration": 14000, "timestamp": 1763560000,
          "live_status": "was_live"},
         {"id": "def", "title": "Minecraft but", "duration": 600, "timestamp": 1763560000}] if "streams" in url else [])
-    got = sources.youtube_channel_videos("@Tomovids")
+    got = sources.youtube_channel_videos("@ExempleChaine")
     assert [f.id for f in got] == ["abc", "def"] and got[0].game == "Grand Theft Auto VI" and got[1].game == ""
-    assert got[0].streamer == "tomovids" and got[0].url.endswith("watch?v=abc")
+    assert got[0].streamer == "exemplechaine" and got[0].url.endswith("watch?v=abc")
 
 
 def test_replays_are_clipped_after_the_viewer_clips_and_never_while_live():
@@ -93,7 +93,7 @@ def test_replay_that_cannot_be_downloaded_yet_is_retried(monkeypatch, tmp_path):
     cfg = load_config()
     monkeypatch.setattr(hunt, "SEEN", tmp_path / "seen.json")
     vod = sources.Found(platform="youtube", id="abc", url="https://www.youtube.com/watch?v=abc", title="GTA 6 day 1",
-                        views=10, duration=14000, created_at=T0, streamer="tomovids", streamer_name="@Tomovids",
+                        views=10, duration=14000, created_at=T0, streamer="exemplechaine", streamer_name="@ExempleChaine",
                         game="Grand Theft Auto VI", extra={"vod": True, "live": False, "dated": True})
     monkeypatch.setattr(hunt, "discover", lambda c, s: ([vod], []))
 
@@ -104,17 +104,17 @@ def test_replay_that_cannot_be_downloaded_yet_is_retried(monkeypatch, tmp_path):
     for name in ("step_summary", "cleanup_releases", "open_issue"):
         monkeypatch.setattr(hunt.deliver, name, lambda *a, **k: None)
     monkeypatch.setattr(hunt.deliver, "pages_url", lambda: "")
-    hunt.run_hunt(cfg, [TOMO], tmp_path, tmp_path)
+    hunt.run_hunt(cfg, [YT], tmp_path, tmp_path)
     assert json.loads((tmp_path / "seen.json").read_text()) == {}          # rien de marqué : nouvel essai
 
 
-def test_tomo_clip_ends_with_the_required_call_to_action():
+def test_campaign_clip_ends_with_its_call_to_action():
     cfg = load_config()
-    ass = captions.build_ass([], hook="TOMO FAILS", context="", credit="Tomo · @Tomovids", total=20.0, cfg=cfg,
-                             cta=campaign.cta(TOMO))
+    ass = captions.build_ass([], hook="YT FAILS", context="", credit="Exemple · @ExempleChaine", total=20.0, cfg=cfg,
+                             cta=campaign.cta(YT))
     line = next(x for x in ass.splitlines() if "SUBSCRIBE" in x)
     assert line.startswith("Dialogue: 6,0:00:17.20,0:00:20.00,Hook")
-    tags = campaign.hashtags(TOMO, "seed")
-    assert tags[:3] == ["#ad", "#tomovids", "#gta6"] and len(tags) == 6
-    assert campaign.hashtags(TOMO, "seed") == tags                         # même clip, mêmes hashtags
-    assert {tuple(campaign.hashtags(TOMO, str(i))) for i in range(10)} != {tuple(tags)}   # ils varient
+    tags = campaign.hashtags(YT, "seed")
+    assert tags[:3] == ["#ad", "#exemplechaine", "#gta6"] and len(tags) == 6
+    assert campaign.hashtags(YT, "seed") == tags                         # même clip, mêmes hashtags
+    assert {tuple(campaign.hashtags(YT, str(i))) for i in range(10)} != {tuple(tags)}   # ils varient

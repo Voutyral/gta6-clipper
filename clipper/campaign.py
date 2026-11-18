@@ -128,7 +128,7 @@ def hashtags(preset: dict | None, seed: str = "") -> list[str]:
 
 
 def cta(preset: dict | None) -> str:
-    """Appel à l'action écrit à la fin du clip (« SUBSCRIBE TO TOMO ON YOUTUBE »)."""
+    """Appel à l'action écrit à la fin du clip (« SUBSCRIBE TO HIM ON YOUTUBE »)."""
     return str((preset or {}).get("cta") or "").strip()
 
 
