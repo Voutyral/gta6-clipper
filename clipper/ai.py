@@ -77,8 +77,10 @@ def gemini_upload(path: Path, mime: str = "video/mp4") -> str | None:
                 "X-Goog-Upload-Command": "upload, finalize"})
         info = (r2.json() or {}).get("file", {})
         name, uri, state = info.get("name"), info.get("uri"), info.get("state")
+        t0 = time.time()
         for _ in range(60):
             if state == "ACTIVE":
+                log(f"Gemini : vidéo envoyée et prête en {time.time() - t0:.0f} s")
                 return uri
             if state == "FAILED" or not name:
                 return None
@@ -90,14 +92,31 @@ def gemini_upload(path: Path, mime: str = "video/mp4") -> str | None:
     return None
 
 
+def _thinking(model: str, level: str) -> dict | None:
+    """Effort de réflexion : « low » suffit pour noter un clip et répond bien plus vite."""
+    level = str(level or "").lower()
+    if not level or level in ("default", "auto") or _state.get("no_thinking_cfg"):
+        return None
+    if model.startswith("gemini-3"):
+        return {"thinkingLevel": level}
+    if model.startswith("gemini-2.5"):
+        return {"thinkingBudget": 1024 if level == "low" else -1}
+    return None
+
+
 def _gemini(cfg: dict, parts: list[dict], want_json: bool) -> str | None:
     key = os.environ["GEMINI_API_KEY"]
     models = [_state["gemini_model"]] if _state["gemini_model"] else list(cfg["ai"]["gemini_models"])
-    body: dict = {"contents": [{"role": "user", "parts": parts}]}
-    if want_json:
-        body["generationConfig"] = {"responseMimeType": "application/json"}
     for model in models:
-        for attempt in range(2):
+        for attempt in range(3):
+            gen: dict = {"responseMimeType": "application/json"} if want_json else {}
+            think = _thinking(model, cfg["ai"].get("gemini_thinking", "low"))
+            if think:
+                gen["thinkingConfig"] = think
+            body: dict = {"contents": [{"role": "user", "parts": parts}]}
+            if gen:
+                body["generationConfig"] = gen
+            t0 = time.time()
             try:
                 r = requests.post(f"{GEMINI}/v1beta/models/{model}:generateContent", timeout=600,
                                   headers={"x-goog-api-key": key, "Content-Type": "application/json"},
@@ -105,7 +124,12 @@ def _gemini(cfg: dict, parts: list[dict], want_json: bool) -> str | None:
             except requests.RequestException as exc:
                 log(f"Gemini injoignable : {exc}")
                 break
+            if r.status_code == 400 and think and "think" in r.text.lower():
+                log(f"Gemini {model} : réglage de réflexion refusé, on le retire.")
+                _state["no_thinking_cfg"] = True
+                continue
             if r.status_code == 200:
+                log(f"Gemini {model} : réponse en {time.time() - t0:.0f} s")
                 _state["gemini_model"] = model
                 try:
                     cand = r.json()["candidates"][0]
@@ -118,7 +142,7 @@ def _gemini(cfg: dict, parts: list[dict], want_json: bool) -> str | None:
                     return text
                 log(f"Gemini {model} : réponse vide ou bloquée ({r.text[:300]})")
                 break
-            if r.status_code in (429, 500, 503) and attempt == 0:
+            if r.status_code in (429, 500, 503) and attempt < 2:
                 time.sleep(20 if r.status_code == 429 else 8)
                 continue
             log(f"Gemini {model} : HTTP {r.status_code} {r.text[:200]}")

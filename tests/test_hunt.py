@@ -190,3 +190,19 @@ def test_sidecar_card_is_complete(tmp_path):
     card = json.loads(Path(side).read_text())
     assert card["file"] == "x.mp4" and card["thumb"] == "x.jpg" and thumb.exists()
     assert card["ai_score"] == 8.0 and card["platform"] == "twitch" and card["go"] is True
+
+
+def test_hashtags_follow_the_real_game():
+    from clipper.pipeline import hashtags_for
+    cfg = load_config()
+    assert hashtags_for("Grand Theft Auto V (GTA)", cfg) == ["#GTA5", "#GTAV", "#GTARP", "#Shorts"]
+    assert hashtags_for("Grand Theft Auto VI", cfg) == ["#GTA6", "#GTAVI", "#Shorts"]
+    assert hashtags_for("", cfg) == cfg["metadata"]["hashtags"]
+
+
+def test_game_crop_avoids_the_webcam():
+    from clipper.render import game_x
+    right = game_x(0.74, 0.255)
+    assert "0.7400*iw-1080" in right and right.startswith("max(0,min(iw-1080,min(")
+    left = game_x(0.0, 0.24)
+    assert "max((iw-1080)/2,0.2400*iw)" in left

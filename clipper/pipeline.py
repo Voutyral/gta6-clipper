@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import traceback
 from dataclasses import dataclass, field
@@ -145,13 +146,25 @@ def clean_hook(text: str) -> str:
     return " ".join(words[:6])[:40].strip()
 
 
-def build_description(desc: str, credit: str, url: str, cfg: dict) -> str:
+def hashtags_for(game: str, cfg: dict) -> list[str]:
+    meta = cfg["metadata"]
+    by_game = meta.get("hashtags_by_game") or {}
+    def norm(t) -> str:   # Kick ajoute « (GTA) » au nom du jeu
+        return re.sub(r"\s*\(.*\)\s*$", "", str(t or "")).strip().lower()
+
+    for name, tags in by_game.items():
+        if game and norm(game) == norm(name):
+            return list(tags) + list(meta.get("hashtags_common") or [])
+    return list(meta["hashtags"])
+
+
+def build_description(desc: str, credit: str, url: str, cfg: dict, game: str = "") -> str:
     lines = [desc.strip()] if desc.strip() else []
     if not fetch.is_local(url):
         lines.append(f"Source : {credit} ({url})" if credit else f"Source : {url}")
     elif credit:
         lines.append(f"Source : {credit}")
-    lines.append(" ".join(cfg["metadata"]["hashtags"]))
+    lines.append(" ".join(hashtags_for(game, cfg)))
     return "\n\n".join(lines)
 
 
@@ -217,7 +230,7 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
     return Plan(
         src=c.src, start=start, end=end, words=c.words, peaks=peaks, hook=clean_hook(hook),
         context=context.strip()[:60], credit=credit, title=" ".join(title.split())[:95],
-        description=build_description(desc, credit, info.get("webpage_url") or req.url, cfg),
+        description=build_description(desc, credit, info.get("webpage_url") or req.url, cfg, req.game_hint),
         tags=tags, layout=req.layout or "auto", preset=preset, flags=set(req.flags), score=score,
         what=what, risks=risks, source_url=info.get("webpage_url") or req.url,
         source_time=c.origin + start, lang=c.lang, ai_score=ai_score)

@@ -4,7 +4,11 @@
 metadata:
   game: "GTA 6"
   language: fr                      # langue des titres, accroches et descriptions
-  hashtags: ["#GTA6", "#GTAVI", "#Shorts"]
+  hashtags: ["#GTA6", "#GTAVI", "#Shorts"]       # pour les clips envoyés à la main
+  hashtags_by_game:                 # selon le jeu du clip trouvé par la chasse
+    "Grand Theft Auto VI": ["#GTA6", "#GTAVI"]
+    "Grand Theft Auto V": ["#GTA5", "#GTAV", "#GTARP"]
+  hashtags_common: ["#Shorts"]
   fallback_hooks:                   # accroches utilisées seulement si aucune IA ne répond
     - "ATTENDS LA FIN"
     - "PERSONNE S'Y ATTENDAIT"
@@ -55,6 +59,7 @@ ai:
   gemini_models: [gemini-3.8-flash, gemini-3-flash-preview, gemini-2.5-flash]
   github_models: [openai/gpt-4.1-mini, openai/gpt-4o-mini, openai/gpt-4.1, openai/gpt-4o]
   claude_model: claude-haiku-5-5
+  gemini_thinking: low              # low : réponse rapide ; default : réflexion longue
 
 delivery:
   release: true                     # lien de téléchargement sur GitHub

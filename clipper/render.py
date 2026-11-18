@@ -71,6 +71,16 @@ def pick_layout(plan: Plan, info: dict, ed: dict) -> str:
     return want if want in ("blur", "crop", "split", "fill") else "blur"
 
 
+def game_x(cam_x: float, cam_w: float) -> str:
+    """Abscisse du recadrage du jeu : centré, mais décalé pour ne pas montrer la webcam en double."""
+    centered = f"(iw-{W})/2"
+    if cam_x + cam_w / 2 >= 0.5:          # webcam à droite : le bord droit s'arrête avant elle
+        want = f"min({centered},{cam_x:.4f}*iw-{W})"
+    else:                                  # webcam à gauche : le bord gauche commence après elle
+        want = f"max({centered},{cam_x + cam_w:.4f}*iw)"
+    return f"max(0,min(iw-{W},{want}))"
+
+
 def layout_chain(src: str, out: str, layout: str, ed: dict, preset: dict, fps_s: str, tag: str) -> str:
     """Chaîne ffmpeg qui transforme [src] en image verticale [out]."""
     tail = f"fps={fps_s},setsar=1,format=yuv420p[{out}]"
@@ -87,7 +97,7 @@ def layout_chain(src: str, out: str, layout: str, ed: dict, preset: dict, fps_s:
                 f"[c{tag}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*{x:.4f}:ih*{y:.4f},"
                 f"scale={W}:{cam_h}:force_original_aspect_ratio=increase:flags=lanczos,"
                 f"crop={W}:{cam_h}[cc{tag}];"
-                f"[g{tag}]scale=-2:{game_h}:flags=lanczos,crop={W}:{game_h}[gg{tag}];"
+                f"[g{tag}]scale=-2:{game_h}:flags=lanczos,crop={W}:{game_h}:'{game_x(x, w)}':0[gg{tag}];"
                 f"[cc{tag}][gg{tag}]vstack=inputs=2,{tail}")
     zoom = max(1.0, float(ed.get("zoom", 1.25)))
     fg_w = int(round(W * zoom / 2) * 2)
