@@ -250,12 +250,13 @@ def ai_fix_words(c: Candidate, ev: dict, req: ClipRequest, cap: dict) -> bool:
     fixed = str(ev.get("transcript") or "").strip()
     if not (cap.get("ai_fix", True) and fixed and c.words):
         return True
-    new, ratio, changed = wordfix.align(c.words, fixed)
+    new, ratio, edits = wordfix.align(c.words, fixed)
     if new is c.words:
         log(f"Correction des sous-titres ignorée : trop loin de ce qui a été entendu ({ratio:.0%}).")
     else:
-        log(f"Sous-titres corrigés par l'IA : {changed} mot(s) revu(s), ressemblance {ratio:.0%}.")
-        c.words = new
+        c.words = new   # même sans mot changé, la ponctuation de l'IA aide à couper les phrases
+        log(f"Sous-titres vérifiés par l'IA (ressemblance {ratio:.0%}) : "
+            + (f"{len(edits)} correction(s) : " + wordfix.describe(edits) if edits else "rien à corriger."))
     return True
 
 

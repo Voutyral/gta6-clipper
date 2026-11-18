@@ -11,7 +11,7 @@ import re
 import unicodedata
 from difflib import SequenceMatcher
 
-from .captions import normalize_words
+from .captions import display_word, normalize_words
 
 
 def key(word: str) -> str:
@@ -34,31 +34,36 @@ def _spread(tokens: list[str], start: float, end: float) -> list[dict]:
     return out
 
 
-def align(words: list[dict], corrected: str, min_ratio: float = 0.45) -> tuple[list[dict], float, int]:
-    """Retourne (mots corrigés horodatés, ressemblance entre 0 et 1, nombre de mots changés).
+def align(words: list[dict], corrected: str,
+          min_ratio: float = 0.45) -> tuple[list[dict], float, list[tuple[str, str]]]:
+    """Retourne (mots corrigés horodatés, ressemblance entre 0 et 1, corrections « avant → après »).
 
     Si la correction ressemble trop peu à ce qui a été entendu (moins de `min_ratio`),
     elle est jugée douteuse et les mots d'origine sont gardés.
     """
     tokens = [t for t in (corrected or "").split() if key(t)]
     if not words or not tokens:
-        return words, 0.0, 0
+        return words, 0.0, []
     a = [key(w["raw"]) for w in words]
     b = [key(t) for t in tokens]
     sm = SequenceMatcher(None, a, b, autojunk=False)
     ratio = sm.ratio()
     if ratio < min_ratio:
-        return words, ratio, 0
+        return words, ratio, []
     out: list[dict] = []
-    changed = 0
+    edits: list[tuple[str, str]] = []
+
+    def said(i1: int, i2: int) -> str:
+        return " ".join(w["raw"] for w in words[i1:i2])
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
         if tag == "equal":
             for k in range(i2 - i1):
                 out.append(dict(words[i1 + k], raw=tokens[j1 + k]))
-                changed += words[i1 + k]["raw"] != tokens[j1 + k]   # accent ou ponctuation corrigés
+                if display_word(words[i1 + k]["raw"]) != display_word(tokens[j1 + k]):   # accent corrigé
+                    edits.append((words[i1 + k]["raw"], tokens[j1 + k]))
         elif tag == "replace":
             out.extend(_spread(tokens[j1:j2], words[i1]["s"], words[i2 - 1]["e"]))
-            changed += max(i2 - i1, j2 - j1)
+            edits.append((said(i1, i2), " ".join(tokens[j1:j2])))
         elif tag == "insert":
             prev = out[-1] if out else None
             nxt = words[i1]["s"] if i1 < len(words) else None
@@ -76,9 +81,18 @@ def align(words: list[dict], corrected: str, min_ratio: float = 0.45) -> tuple[l
                 end = nxt if nxt is not None else 0.25 * n
                 start = max(0.0, end - 0.25 * n)
             out.extend(_spread(tokens[j1:j2], start, end))
-            changed += n
+            edits.append(("", " ".join(tokens[j1:j2])))
         else:
             # « delete » : des mots entendus que l'IA juge absents (souvent inventés) disparaissent.
-            changed += i2 - i1
+            edits.append((said(i1, i2), ""))
     # Mots nettoyés, temps croissants (le temps est déjà celui de la source : pas de plafond).
-    return normalize_words(out, 1e9), ratio, changed
+    return normalize_words(out, 1e9), ratio, edits
+
+
+def describe(edits: list[tuple[str, str]], limit: int = 12) -> str:
+    """« la viande → l'avion de », « + à », « − dessus » : lisible dans le journal du lancement."""
+    parts = []
+    for old, new in edits[:limit]:
+        parts.append(f"« {old} » → « {new} »" if old and new else (f"+ « {new} »" if new else f"− « {old} »"))
+    more = len(edits) - limit
+    return ", ".join(parts) + (f", et {more} autre(s)" if more > 0 else "")

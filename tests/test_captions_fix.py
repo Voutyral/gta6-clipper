@@ -64,13 +64,15 @@ def test_ai_correction_keeps_word_timing():
     assert by["CHASSE"]["s"] == heard[3]["s"]          # mot reconnu : temps d'origine
     assert heard[1]["s"] <= by["L'AVION"]["s"] < by["DE"]["s"] < by["CHASSE"]["s"]
     assert all(a["s"] <= b["s"] for a, b in zip(fixed, fixed[1:], strict=False))
-    assert ratio > 0.5 and changed >= 4
+    assert ratio > 0.5 and len(changed) >= 2
+    assert ("la viande", "l'avion de") in changed
+    assert "« la viande » → « l'avion de »" in wordfix.describe(changed)
 
 
 def test_ai_correction_too_far_is_ignored():
     heard = _words("on y va les gars c'est parti")
     same, ratio, changed = wordfix.align(heard, "Abonnez-vous à la chaîne pour plus de vidéos de ce genre")
-    assert same is heard and changed == 0 and ratio < 0.45
+    assert same is heard and changed == [] and ratio < 0.45
 
 
 def test_ai_words_far_from_any_speech_are_not_guessed():
