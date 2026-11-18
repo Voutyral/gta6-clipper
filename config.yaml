@@ -48,7 +48,9 @@ edit:
 
 captions:
   enabled: true
-  whisper_model: small              # tiny | base | small (small : bon compromis sur GitHub)
+  engine: parakeet                  # parakeet (meilleur sur l'argot) | whisper (secours)
+  ai_fix: true                      # Gemini réécoute le clip et corrige les mots (noms, argot)
+  whisper_model: small              # tiny | base | small : utilisé si engine whisper ou en secours
   style: reveal                     # reveal (mots à venir estompés) | pop (mot courant coloré seulement)
   max_words: 3
   max_chars: 13

@@ -59,7 +59,12 @@ def _tools() -> str:
         fw = "faster-whisper " + faster_whisper.__version__
     except Exception:
         fw = "faster-whisper absent"
-    return f"🧰 Outils : {ff}, {yd}, {fw}, deno {'présent' if shutil.which('deno') else 'absent'}"
+    try:
+        import sherpa_onnx
+        sx = "sherpa-onnx " + getattr(sherpa_onnx, "__version__", "?") + " (Parakeet)"
+    except Exception:
+        sx = "sherpa-onnx absent (sous-titres par Whisper)"
+    return f"🧰 Outils : {ff}, {yd}, {sx}, {fw}, deno {'présent' if shutil.which('deno') else 'absent'}"
 
 
 def _describe(info: dict) -> str:

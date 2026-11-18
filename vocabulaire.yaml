@@ -1,0 +1,58 @@
+# Mots que les sous-titres doivent savoir écrire : argot, noms propres, termes de jeu.
+# Gemini s'en sert pour corriger la transcription (en écoutant le clip).
+# Ajoute ici tout mot mal écrit dans un clip : streamer, serveur RP, personnage, expression.
+# Modifiable depuis le téléphone : ouvre ce fichier sur GitHub, icône crayon.
+
+argot:
+  - wesh
+  - frérot
+  - le frère
+  - gros
+  - askip
+  - tkt
+  - jsp
+  - zinzin
+  - dinguerie
+  - masterclass
+  - la hess
+  - le seum
+  - chelou
+  - relou
+  - ouf
+  - grave
+  - sah
+  - wallah
+  - en vrai
+  - c'est carré
+  - c'est chaud
+  - j'suis mort
+  - la honte
+  - le délire
+  - trop fort
+  - t'es fou
+  - t'inquiète
+
+jeu:
+  - GTA
+  - GTA 6
+  - RP
+  - roleplay
+  - LSPD
+  - Los Santos
+  - Vice City
+  - Leonida
+  - Lucia
+  - Jason
+  - NoPixel
+  - GG
+  - clutch
+  - one shot
+  - spawn
+  - loot
+  - farm
+  - braquage
+  - course-poursuite
+
+streamers_et_personnages:   # ajoute tes streamers, leurs pseudos RP et les noms de serveurs
+  - MasterSnakou
+  - Mannyy

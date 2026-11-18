@@ -1,5 +1,6 @@
 numpy>=1.26
 PyYAML>=6.0
 requests>=2.31
+sherpa-onnx>=1.12
 faster-whisper>=1.1
 yt-dlp[default,curl-cffi]

@@ -70,7 +70,7 @@ Pour enchaîner, commente la même issue avec un nouveau lien, ou passe par **Ac
 ## Ce que le montage ajoute
 
 * Accroche en haut et ligne de contexte pendant les premières secondes
-* Sous-titres mot à mot, les mots à venir estompés
+* Sous-titres mot à mot, les mots à venir estompés. Ils sont écrits par Parakeet (NVIDIA), bien plus juste que Whisper sur l'oral de stream, puis Gemini réécoute le clip et corrige les noms et l'argot. Ajoute tes mots (pseudos, personnages, expressions) dans `vocabulaire.yaml`, modifiable depuis le téléphone
 * Aperçu de 2 secondes du moment fort en ouverture, puis retour au début
 * Zoom et secousse brefs sur chaque impact, repérés au son
 * Bruitages (whoosh, impact) fabriqués par le programme, donc libres de droits
@@ -141,7 +141,8 @@ Limite connue : le cadre de la webcam est donné par Gemini et déborde parfois 
 * **Tout vérifier d'un coup** : onglet **Actions**, **Diagnostic**, **Run workflow**. Le bilan dit si Gemini et l'envoi YouTube répondent, et teste les liens que tu lui donnes.
 
 * **Rien ne se passe** : l'issue doit être ouverte par le propriétaire du dépôt. Regarde l'onglet **Actions**.
-* **Pas de sous-titres** : aucune parole détectée, ou modèle Whisper indisponible. Le clip sort quand même.
+* **Pas de sous-titres** : aucune parole détectée, ou modèle de transcription indisponible. Le clip sort quand même.
+* **Un mot revient mal écrit** : ajoute-le dans `vocabulaire.yaml` (crayon sur GitHub, puis **Commit changes**). Gemini s'en sert au clip suivant.
 * **Quota** : GitHub offre 2 000 minutes par mois aux dépôts privés, soit environ 300 clips.
 
 ## Sur ton ordinateur ou dans une session Claude

@@ -49,6 +49,8 @@ DEFAULTS: dict = {
     },
     "captions": {
         "enabled": True,
+        "engine": "parakeet",
+        "ai_fix": True,
         "whisper_model": "small",
         "style": "reveal",
         "max_words": 3,

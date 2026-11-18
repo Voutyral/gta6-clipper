@@ -314,20 +314,24 @@ Réponds uniquement par un objet JSON avec ces clés :
 - "tags" : 6 à 10 mots-clés sans #
 - "facecam" : position de la webcam du streamer incrustée dans l'image, au format [ymin, xmin, ymax, xmax] normalisé de 0 à 1000, ou null s'il n'y en a pas
 - "risks" : liste, vide ou parmi "cinematique" (cinématique du jeu montrée seule), "spoiler" (fin du jeu ou révélation majeure de l'histoire), "violence_debut" (violence graphique dans les 7 premières secondes), "musique" (musique sous licence très présente, par exemple la radio du jeu)
+- "transcript" : ce qui est dit dans TOUT l'extrait, mot pour mot, du début à la fin, sans horodatage, d'après le son. Pars du brouillon fourni et corrige les mots mal entendus, surtout les noms, pseudos, argot et termes de jeu (aide-toi du vocabulaire). Garde l'oral tel qu'il est prononcé : répétitions, hésitations utiles, argot (« wesh », « frérot », « dinguerie »), élisions (« j'suis », « t'as »). Ne résume pas, ne reformule pas, ne traduis pas, n'ajoute rien qu'on n'entend pas. Ponctuation simple. "" si personne ne parle
+- "spoken_lang" : code ISO 639-1 de la langue parlée (fr, en, es…), "" si personne ne parle
 
-Règles : écris en {lang}. N'invente aucun fait absent de l'extrait. Pas de titre mensonger. Aucun spoiler dans le titre ni dans l'accroche."""
+Règles : écris en {lang}, sauf "transcript" qui reste dans la langue parlée. N'invente aucun fait absent de l'extrait. Pas de titre mensonger. Aucun spoiler dans le titre ni dans l'accroche."""
 
 
 def evaluate(cfg: dict, *, text: str, dur: float, peak: float | None, title: str, credit: str,
              lang: str, video: Path | None = None, sheet: bytes | None = None,
-             game: str = "") -> tuple[dict | None, str]:
+             game: str = "", vocab: list[str] | None = None) -> tuple[dict | None, str]:
     det = cfg["detection"]
     system = EVAL_SYSTEM.format(game=game or cfg["metadata"]["game"], min_s=det["clip_min_s"],
                                 max_s=det["clip_max_s"], lang=lang)
     user = (f"Source : « {title or 'inconnue'} ». Chaîne : {credit or 'inconnue'}.\n"
             f"Durée de l'extrait : {dur:.1f} s."
             + (f" Pic sonore à {peak:.1f} s." if peak is not None else "")
-            + "\nTranscription :\n" + (text or "(aucune parole détectée)"))
+            + (("\nVocabulaire possible (noms, pseudos, argot) : " + ", ".join(vocab[:120]) + ".") if vocab else "")
+            + "\nBrouillon de transcription automatique (horodaté, peut contenir des erreurs) :\n"
+            + (text or "(aucune parole détectée)"))
     answer, name = ask(cfg, system, user, video=video, sheet=sheet)
     data = parse_json(answer)
     if answer and data is None:

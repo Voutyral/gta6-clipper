@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import ai, captions, deliver, detect, fetch, transcribe, youtube
+from . import ai, captions, deliver, detect, fetch, transcribe, vocab, wordfix, youtube
 from . import verify as qc
 from .config import match_streamer
 from .render import Plan, contact_sheet, make_proxy, render
@@ -236,11 +236,37 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
         source_time=c.origin + start, lang=c.lang, ai_score=ai_score)
 
 
+def ai_fix_words(c: Candidate, ev: dict, req: ClipRequest, cap: dict) -> bool:
+    """Gemini a écouté le clip : on reprend sa transcription (noms, argot) sur nos temps de mots.
+
+    Renvoie False si le passage doit être écarté (langue parlée hors de celles voulues).
+    """
+    spoken = str(ev.get("spoken_lang") or "").strip().lower()[:2]
+    if spoken:
+        if req.langs and spoken not in req.langs and len(c.words) >= 6:
+            log(f"Passage écarté : l'IA entend du « {spoken} », langues voulues {req.langs}.")
+            return False
+        c.lang = spoken
+    fixed = str(ev.get("transcript") or "").strip()
+    if not (cap.get("ai_fix", True) and fixed and c.words):
+        return True
+    new, ratio, changed = wordfix.align(c.words, fixed)
+    if new is c.words:
+        log(f"Correction des sous-titres ignorée : trop loin de ce qui a été entendu ({ratio:.0%}).")
+    else:
+        log(f"Sous-titres corrigés par l'IA : {changed} mot(s) revu(s), ressemblance {ratio:.0%}.")
+        c.words = new
+    return True
+
+
 def plan_candidates(cands: list[Candidate], req: ClipRequest, info: dict, cfg: dict, preset: dict,
                     credit: str, work: Path, n: int) -> tuple[list[Plan], str]:
     """Transcrit, évalue (IA si disponible) et retient les `n` meilleurs passages."""
     lang_out = req.lang or cfg["metadata"]["language"]
     use_ai = bool(ai.providers(cfg)) and "noai" not in req.flags
+    cap = cfg["captions"]
+    words_vocab = vocab.for_clip(vocab.load_vocab(), credit, req.meta.get("streamer", ""),
+                                 info.get("channel", ""))
     if not use_ai:
         cands = sorted(cands, key=lambda c: c.score, reverse=True)[:n]
     plans: list[Plan] = []
@@ -248,7 +274,8 @@ def plan_candidates(cands: list[Candidate], req: ClipRequest, info: dict, cfg: d
     for i, c in enumerate(cands):
         dur = c.end - c.start
         c.words, c.lang = transcribe.transcribe(
-            c.src, c.start, dur, model_name=cfg["captions"]["whisper_model"], workdir=work)
+            c.src, c.start, dur, model_name=cap["whisper_model"], workdir=work,
+            engine=cap.get("engine", "parakeet"), vocab=words_vocab, cfg=cfg)
         if req.langs and c.lang and c.lang not in req.langs and len(c.words) >= 6:
             log(f"Passage écarté : on y parle « {c.lang} », langues voulues {req.langs}.")
             continue
@@ -266,8 +293,11 @@ def plan_candidates(cands: list[Candidate], req: ClipRequest, info: dict, cfg: d
                 cfg, text=transcribe.words_to_lines(c.words, c.start), dur=dur,
                 peak=(c.peak - c.start) if c.peak is not None else None,
                 title=info.get("title", ""), credit=credit, lang=lang_out, video=video,
-                sheet=sh.read_bytes() if sh else None, game=req.game_hint)
+                sheet=sh.read_bytes() if sh else None, game=req.game_hint, vocab=words_vocab)
             used = used or name
+            if ev and name == "gemini" and video is not None:
+                if not ai_fix_words(c, ev, req, cap):
+                    continue
         plans.append(build_plan(c, ev, peaks, req, info, cfg, preset, credit, i))
     plans.sort(key=lambda p: p.score, reverse=True)
     return plans[:n], used
