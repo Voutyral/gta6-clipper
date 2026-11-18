@@ -118,11 +118,13 @@ def _gemini(cfg: dict, parts: list[dict], want_json: bool) -> str | None:
                 body["generationConfig"] = gen
             t0 = time.time()
             try:
-                r = requests.post(f"{GEMINI}/v1beta/models/{model}:generateContent", timeout=600,
+                r = requests.post(f"{GEMINI}/v1beta/models/{model}:generateContent",
+                                  timeout=int(cfg["ai"].get("gemini_timeout_s", 120)),
                                   headers={"x-goog-api-key": key, "Content-Type": "application/json"},
                                   json=body)
             except requests.RequestException as exc:
-                log(f"Gemini injoignable : {exc}")
+                # Modèle saturé (déjà vu : plus de 10 min sans réponse) : on passe au suivant.
+                log(f"Gemini {model} : pas de réponse ({type(exc).__name__}), modèle suivant.")
                 break
             if r.status_code == 400 and think and "think" in r.text.lower():
                 log(f"Gemini {model} : réglage de réflexion refusé, on le retire.")

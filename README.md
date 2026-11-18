@@ -128,7 +128,11 @@ Vérifié en conditions réelles : lecture des demandes, repérage des moments f
 
 Vérifié ensuite sur GitHub, le 16 novembre 2026, avec une vidéo libre de droits : installation, téléchargement, sous-titres Whisper, montage, contrôle et lien de téléchargement.
 
-Reste à valider avec tes clés et tes liens : Gemini, l'envoi YouTube, et les sites eux-mêmes (Twitch, Kick). Chaque échec est écrit en clair dans l'issue avec la marche à suivre.
+Vérifié sur GitHub le 18 novembre 2026 : clip Twitch envoyé par issue (Gemini a resserré la coupe et écrit l'accroche) ; chasse réelle (98 clips lus sur Twitch et Kick, 2 clips français montés, notés 8 et 7 sur 10, webcam repérée, GO, issue de notification ouverte) ; Kick lisible et téléchargeable, catégorie GTA VI comprise ; YouTube refuse les serveurs GitHub comme source. La galerie a été testée dans un navigateur au format iPhone (copier, préparer, partager, marquer posté, mémoire après rechargement).
+
+Reste à valider : la publication de la galerie sur GitHub Pages (elle attend que le dépôt soit public et Pages activé) et l'envoi automatique sur YouTube. Chaque échec est écrit en clair dans l'issue avec la marche à suivre.
+
+Limite connue : le cadre de la webcam est donné par Gemini et déborde parfois un peu sur l'interface du jeu. Pour un streamer suivi, la position exacte se règle une fois pour toutes dans `streamers.yaml` (`facecam`).
 
 ## Dépannage
 

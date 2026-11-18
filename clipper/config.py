@@ -57,7 +57,8 @@ DEFAULTS: dict = {
     },
     "ai": {
         "enabled": True,
-        "gemini_models": ["gemini-3.8-flash", "gemini-3-flash-preview", "gemini-2.5-flash"],
+        "gemini_models": ["gemini-3-flash-preview", "gemini-3.8-flash", "gemini-2.5-flash"],
+        "gemini_timeout_s": 120,
         "github_models": ["openai/gpt-4.1-mini", "openai/gpt-4o-mini", "openai/gpt-4.1",
                           "openai/gpt-4o"],
         "claude_model": "claude-haiku-5-5",
