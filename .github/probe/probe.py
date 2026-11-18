@@ -1,83 +1,48 @@
-"""Sonde temporaire : quelles sources Twitch et Kick répondent depuis GitHub ?"""
+"""Sonde temporaire n°2 : détails Kick."""
 import json
-import re
 import subprocess
 import sys
 
-import requests
-
-CID = "kimne78kx3ncx6brgo4mv6wki5h1ko"
-GQL = "https://gql.twitch.tv/gql"
-H = {"Client-Id": CID, "Content-Type": "application/json"}
+from curl_cffi import requests as creq
 
 
-def gql(name, query, variables=None):
+def get(url):
+    r = creq.get(url, impersonate="chrome", timeout=30)
+    return r.status_code, r.headers.get("content-type"), r.text
+
+
+for slug in ("grand-theft-auto-vi", "gta-vi", "grand-theft-auto-6", "gta-6"):
+    s, ct, t = get(f"https://kick.com/api/v1/subcategories/{slug}")
+    print(f"### kick sous-catégorie {slug} -> {s} {t[:160]!r}")
+
+s, ct, t = get("https://kick.com/api/v2/categories/grand-theft-auto-v/clips?cursor=0&sort=view&time=day")
+data = json.loads(t)
+clips = data.get("clips") or []
+print("### nombre de clips GTA V Kick :", len(clips), "| clés racine :", list(data.keys()))
+if clips:
+    c = clips[0]
+    print("### clés d'un clip :", list(c.keys()))
+    print("### channel :", json.dumps(c.get("channel"))[:600])
+    print("### category :", json.dumps(c.get("category"))[:300])
+    print("### top 5 :", [(x.get("title"), x.get("views"), x.get("duration"), (x.get("channel") or {}).get("slug")) for x in clips[:5]])
+    slug = (c.get("channel") or {}).get("slug")
+    page = f"https://kick.com/{slug}/clips/{c['id']}"
+    s2, ct2, t2 = get(f"https://kick.com/api/v2/channels/{slug}")
     try:
-        r = requests.post(GQL, headers=H, json={"query": query, "variables": variables or {}}, timeout=30)
-        body = r.text
-        print(f"\n### {name} -> HTTP {r.status_code}\n{body[:900]}")
+        ch = json.loads(t2)
+        print("### clés chaîne :", list(ch.keys()))
+        for k in ("livestream", "previous_livestreams", "user", "recent_categories"):
+            v = ch.get(k)
+            print(f"### chaîne.{k} :", json.dumps(v)[:400] if v is not None else None)
     except Exception as exc:
-        print(f"\n### {name} -> {exc}")
-
-
-NODE = "slug title viewCount durationSeconds createdAt url broadcaster { login displayName }"
-for crit in ("{period: LAST_DAY, sort: VIEWS_DESC}", "{filter: LAST_DAY}", "{filter: LAST_DAY, languages: [FR]}",
-             "{period: LAST_DAY, sort: VIEWS_DESC, languages: [FR]}"):
-    gql(f"game clips {crit}", f'query {{ game(name: "Grand Theft Auto V") {{ id name clips(first: 3, criteria: {crit}) {{ edges {{ node {{ {NODE} }} }} }} }} }}')
-gql("node extra fields", 'query { game(name: "Grand Theft Auto V") { clips(first: 2, criteria: {filter: LAST_DAY}) { edges { node { slug language game { name displayName } broadcaster { login broadcastSettings { language } } thumbnailURL } } } } }')
-gql("GTA VI game", 'query { game(name: "Grand Theft Auto VI") { id name displayName viewersCount } }')
-gql("user clips", f'query {{ user(login: "sentry") {{ clips(first: 3, criteria: {{filter: LAST_WEEK}}) {{ edges {{ node {{ {NODE} }} }} }} }} }}')
-
-# Requêtes enregistrées (persisted) utilisées par le site Twitch : hash lu dans un paquet public.
-try:
-    meta = requests.get("https://data.jsdelivr.com/v1/package/npm/twitch-gql-queries", timeout=30).json()
-    ver = meta.get("tags", {}).get("latest")
-    print("\ntwitch-gql-queries", ver)
-    files = requests.get(f"https://data.jsdelivr.com/v1/package/npm/twitch-gql-queries@{ver}/flat", timeout=30).json()
-    names = [f["name"] for f in files.get("files", []) if f["name"].endswith(".js")]
-    print("fichiers js :", names[:20])
-    found = {}
-    for n in names:
-        if not re.search(r"(index|queries|clip)", n, re.I):
-            continue
-        txt = requests.get(f"https://cdn.jsdelivr.net/npm/twitch-gql-queries@{ver}{n}", timeout=30).text
-        for m in re.finditer(r"ClipsCards__(Game|User)[\s\S]{0,400}?([0-9a-f]{64})", txt):
-            found.setdefault(m.group(1), m.group(2))
-    print("hashes :", found)
-    if "Game" in found:
-        for crit in ({"filter": "LAST_DAY", "languages": ["FR"]}, {"filter": "LAST_DAY", "languages": []}):
-            body = {"operationName": "ClipsCards__Game", "variables": {"categorySlug": "grand-theft-auto-v", "gameName": "Grand Theft Auto V", "limit": 3, "criteria": crit},
-                    "extensions": {"persistedQuery": {"version": 1, "sha256Hash": found["Game"]}}}
-            r = requests.post(GQL, headers=H, json=body, timeout=30)
-            print(f"\n### persisted ClipsCards__Game {crit} -> HTTP {r.status_code}\n{r.text[:900]}")
-except Exception as exc:
-    print("persisted : erreur", exc)
-
-# yt-dlp
-for url in ("https://www.twitch.tv/sentry/clips?filter=clips&range=7d",
-            "https://www.twitch.tv/directory/category/grand-theft-auto-v/clips?range=24hr"):
-    p = subprocess.run([sys.executable, "-m", "yt_dlp", "--flat-playlist", "-J", "--playlist-end", "3", "--no-warnings", url],
-                       capture_output=True, text=True)
-    out = p.stdout
-    try:
-        d = json.loads(out)
-        ents = [(e.get("title"), e.get("view_count"), e.get("url")) for e in (d.get("entries") or [])][:3]
-        print(f"\n### yt-dlp {url} -> ok {ents}")
-    except Exception:
-        print(f"\n### yt-dlp {url} -> code {p.returncode} {p.stderr[-400:]}")
-
-# Kick
-try:
-    from curl_cffi import requests as creq
-    for url in ("https://kick.com/api/v2/channels/xqc/clips?cursor=0&sort=view&time=day",
-                "https://kick.com/api/v2/clips?cursor=0&sort=view&time=day",
-                "https://kick.com/api/v1/subcategories/grand-theft-auto-v",
-                "https://kick.com/api/v1/subcategories/gta-v",
-                "https://kick.com/api/v2/categories/grand-theft-auto-v/clips?cursor=0&sort=view&time=day"):
-        try:
-            r = creq.get(url, impersonate="chrome", timeout=30)
-            print(f"\n### kick {url} -> HTTP {r.status_code} {r.headers.get('content-type')} {r.text[:500]!r}")
-        except Exception as exc:
-            print(f"\n### kick {url} -> {exc}")
-except Exception as exc:
-    print("curl_cffi absent", exc)
+        print("### chaîne illisible", s2, exc, t2[:200])
+    for url in (page, c.get("clip_url")):
+        p = subprocess.run([sys.executable, "-m", "yt_dlp", "-J", "--no-warnings", url], capture_output=True, text=True)
+        if p.returncode == 0:
+            d = json.loads(p.stdout)
+            print(f"### yt-dlp {url} -> ok titre={d.get('title')!r} durée={d.get('duration')} chaîne={d.get('channel') or d.get('uploader')} formats={len(d.get('formats') or [])}")
+        else:
+            print(f"### yt-dlp {url} -> erreur {p.stderr[-300:]}")
+    p = subprocess.run([sys.executable, "-m", "yt_dlp", "-f", "b", "-o", "/tmp/k.%(ext)s", "--no-warnings", page], capture_output=True, text=True)
+    print("### téléchargement page :", p.returncode, p.stderr[-200:])
+    subprocess.run(["ls", "-la", "/tmp"], check=False)
