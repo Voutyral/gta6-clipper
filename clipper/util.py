@@ -92,3 +92,10 @@ def fmt_ts(sec: float) -> str:
     h, rem = divmod(sec, 3600)
     m, s = divmod(rem, 60)
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+def game_key(name: str) -> str:
+    """« Grand Theft Auto VI », « GTA 6 », « GTA VI (GTA) » → « gta6 » : un nom par jeu."""
+    n = re.sub(r"\(.*?\)", "", str(name or "").lower())
+    n = re.sub(r"[^a-z0-9]", "", n).replace("grandtheftauto", "gta")
+    return {"gtavi": "gta6", "gtav": "gta5", "gtaonline": "gta5", "gtarp": "gta5"}.get(n, n)

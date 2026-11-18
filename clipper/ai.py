@@ -316,6 +316,8 @@ Réponds uniquement par un objet JSON avec ces clés :
 - "risks" : liste, vide ou parmi "cinematique" (cinématique du jeu montrée seule), "spoiler" (fin du jeu ou révélation majeure de l'histoire), "violence_debut" (violence graphique dans les 7 premières secondes), "musique" (musique sous licence très présente, par exemple la radio du jeu)
 - "transcript" : ce qui est dit dans TOUT l'extrait, mot pour mot, du début à la fin, sans horodatage, d'après le son. Pars du brouillon fourni et corrige les mots mal entendus, surtout les noms, pseudos, argot et termes de jeu (aide-toi du vocabulaire). Garde l'oral tel qu'il est prononcé : répétitions, hésitations utiles, argot (« wesh », « frérot », « dinguerie »), élisions (« j'suis », « t'as »). Ne résume pas, ne reformule pas, ne traduis pas, n'ajoute rien qu'on n'entend pas. Ponctuation simple. "" si personne ne parle
 - "spoken_lang" : code ISO 639-1 de la langue parlée (fr, en, es…), "" si personne ne parle
+- "cuts" : passages à retirer pour un montage plus nerveux, liste de [début, fin] en secondes dans l'extrait, à l'intérieur de la coupe conseillée : attente, silence où il ne se passe rien, hésitation, répétition, passage qui n'aide pas à comprendre. Ne retire jamais la mise en place nécessaire, l'action principale ni la chute ; coupe entre deux phrases. [] si tout est utile
+- "game" : nom du jeu à l'écran tel qu'on l'écrit couramment (« GTA 6 », « GTA 5 », « Fortnite »…), "" si aucun jeu
 
 Règles : écris en {lang}, sauf "transcript" qui reste dans la langue parlée. N'invente aucun fait absent de l'extrait. Pas de titre mensonger. Aucun spoiler dans le titre ni dans l'accroche."""
 

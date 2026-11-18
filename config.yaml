@@ -32,6 +32,11 @@ fetch:
 edit:
   layout: auto                      # auto | blur (jeu centré, fond flou) | crop (plein écran) | split (caméra en haut)
   auto_facecam: true                # l'IA repère la webcam du streamer : caméra en haut, jeu en bas
+  jump_cuts: true                   # l'IA retire les temps morts à l'intérieur du clip (montage plus nerveux)
+  jump_zoom: 1.07                   # léger zoom un morceau sur deux, pour marquer chaque coupe
+  max_cuts: 6
+  min_after_cuts_s: 10              # jamais moins de 10 s une fois coupé
+  min_keep_ratio: 0.55              # et jamais moins de 55 % du passage choisi
   zoom: 1.25                        # zoom du jeu en mise en page blur
   teaser: auto                      # aperçu du moment fort en ouverture : auto | on | off
   teaser_s: 1.8

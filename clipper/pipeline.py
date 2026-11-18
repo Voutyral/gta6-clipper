@@ -10,12 +10,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import ai, captions, deliver, detect, fetch, transcribe, vocab, wordfix, youtube
+from . import ai, captions, cuts, deliver, detect, fetch, transcribe, vocab, wordfix, youtube
 from . import verify as qc
 from .config import match_streamer
 from .render import Plan, contact_sheet, make_proxy, render
 from .request import ClipRequest, parse_requests
-from .util import fmt_ts, log, probe_media, run, slugify
+from .util import fmt_ts, game_key, log, probe_media, run, slugify
 
 EXAMPLE = "https://www.twitch.tv/videos/123456 1:02:30-1:03:10 @streamer"
 
@@ -148,14 +148,17 @@ def clean_hook(text: str) -> str:
 
 
 def hashtags_for(game: str, cfg: dict) -> list[str]:
+    """Hashtags du jeu du clip ; un jeu inconnu de config.yaml prend son propre nom en hashtag."""
     meta = cfg["metadata"]
-    by_game = meta.get("hashtags_by_game") or {}
-    def norm(t) -> str:   # Kick ajoute « (GTA) » au nom du jeu
-        return re.sub(r"\s*\(.*\)\s*$", "", str(t or "")).strip().lower()
-
-    for name, tags in by_game.items():
-        if game and norm(game) == norm(name):
-            return list(tags) + list(meta.get("hashtags_common") or [])
+    common = list(meta.get("hashtags_common") or [])
+    key = game_key(game) if game else ""
+    for name, tags in (meta.get("hashtags_by_game") or {}).items():
+        if key and key == game_key(name):
+            return list(tags) + common
+    if key and not key.startswith("gta"):
+        name = re.sub(r"[^0-9A-Za-z]", "", re.sub(r"\(.*?\)", "", str(game)).title())
+        if name:
+            return [f"#{name}", "#Gaming"] + common
     return list(meta["hashtags"])
 
 
@@ -190,6 +193,7 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
     dur = c.end - c.start
     start, end, score = c.start, c.end, float(c.score)
     ai_score = None
+    game = req.game_hint
     hook, context, title, desc, what = req.hook or "", "", "", "", ""
     tags: list[str] = []
     risks: list[str] = []
@@ -218,8 +222,12 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
         what = str(ev.get("what") or "")
         tags = [str(t).lstrip("#").strip() for t in (ev.get("tags") or []) if str(t).strip()][:12]
         risks = [str(r) for r in (ev.get("risks") or []) if isinstance(r, str)]
+        game = game or str(ev.get("game") or "").strip()
     if not c.locked:
         start, end = snap_to_words(start, end, c.words, c.start, c.end)
+    plan_cuts = []
+    if ev and "nocut" not in req.flags:
+        plan_cuts = cuts.from_ai(ev.get("cuts"), c.start, start, end, c.words, cfg["edit"])
     if not hook:
         hook = meta["fallback_hooks"][idx % len(meta["fallback_hooks"])]
     if not title:
@@ -231,10 +239,10 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
     return Plan(
         src=c.src, start=start, end=end, words=c.words, peaks=peaks, hook=clean_hook(hook),
         context=context.strip()[:60], credit=credit, title=" ".join(title.split())[:95],
-        description=build_description(desc, credit, info.get("webpage_url") or req.url, cfg, req.game_hint),
+        description=build_description(desc, credit, info.get("webpage_url") or req.url, cfg, game),
         tags=tags, layout=req.layout or "auto", preset=preset, flags=set(req.flags), score=score,
         what=what, risks=risks, source_url=info.get("webpage_url") or req.url,
-        source_time=c.origin + start, lang=c.lang, ai_score=ai_score)
+        source_time=c.origin + start, lang=c.lang, ai_score=ai_score, cuts=plan_cuts)
 
 
 def ai_fix_words(c: Candidate, ev: dict, req: ClipRequest, cap: dict) -> bool:

@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import json
-import re
 import shutil
 import traceback
 from datetime import datetime, timezone
@@ -21,7 +20,7 @@ from .pipeline import Result, deliver_result, process_request
 from .request import ClipRequest
 from .sources import Found, discover
 from .transcribe import guess_language
-from .util import log
+from .util import game_key, log
 
 SEEN = ROOT / "state" / "seen.json"
 
@@ -59,13 +58,6 @@ def made_today(seen: dict, streamer: str) -> int:
 
 
 # ---------------------------------------------------------------- Tri
-
-def game_key(name: str) -> str:
-    """« Grand Theft Auto VI », « GTA 6 », « GTA VI (GTA) » → « gta6 » : un nom par jeu."""
-    n = re.sub(r"\(.*?\)", "", str(name).lower())
-    n = re.sub(r"[^a-z0-9]", "", n).replace("grandtheftauto", "gta")
-    return {"gtavi": "gta6", "gtav": "gta5"}.get(n, n)
-
 
 def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
          now: datetime | None = None, stats: dict | None = None) -> list[tuple[float, Found, dict, str]]:

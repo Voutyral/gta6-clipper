@@ -12,7 +12,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import captions, sfx
+from . import captions, cuts, sfx
 from .config import ROOT
 from .util import CmdError, log, probe_media, run
 
@@ -44,6 +44,7 @@ class Plan:
     source_time: float = 0.0   # position du début du fichier dans la vidéo d'origine
     lang: str = ""
     ai_score: float | None = None
+    cuts: list = field(default_factory=list)   # plages [début, fin] à retirer (temps source)
 
 
 def _facecam(preset: dict | None):
@@ -162,10 +163,17 @@ def _render(plan: Plan, out: Path, cfg: dict, workdir: Path, flags: set) -> dict
     fps_s = f"{fps:.3f}".rstrip("0").rstrip(".")
     layout = pick_layout(plan, info, ed)
 
-    inside = [p for p in plan.peaks if start + 1.0 <= p <= end - 1.0]
-    punches: list[float] = []
+    # Coupes dynamiques : la partie principale devient une suite de morceaux gardés.
+    segs = [(start, end)]
+    if plan.cuts and not raw and "nocut" not in flags:
+        segs = cuts.keep_segments(start, end, plan.cuts)
+    main = sum(e - s for s, e in segs)
+
+    inside = [p for p in plan.peaks if start + 1.0 <= p <= end - 1.0 and cuts.remap(p, segs) is not None]
+    punch_src: list[float] = []   # temps source des impacts
     if ed.get("punch", True) and not raw and "nopunch" not in flags:
-        punches = sorted(p - start for p in inside[: int(ed.get("max_punches", 3))])
+        punch_src = sorted(inside[: int(ed.get("max_punches", 3))])
+    punches = [cuts.remap(p, segs) for p in punch_src]   # temps dans la partie principale
 
     mode = str(ed.get("teaser", "auto")).lower()
     if raw or "noteaser" in flags:
@@ -174,18 +182,27 @@ def _render(plan: Plan, out: Path, cfg: dict, workdir: Path, flags: set) -> dict
         mode = "on"
     td = float(ed.get("teaser_s", 1.8))
     teaser_at = None
-    if mode in ("on", "auto", "true") and inside and dur >= 16:
-        strongest = inside[0] - start
-        if (mode != "auto" or strongest >= 8.0) and strongest - 0.35 + td <= dur:
+    if mode in ("on", "auto", "true") and inside and main >= 16:
+        strongest = cuts.remap(inside[0], segs)
+        if (mode != "auto" or strongest >= 8.0) and strongest - 0.35 + td <= main:
             teaser_at = max(start, inside[0] - 0.35)
     offset = td if teaser_at is not None else 0.0
-    total = dur + offset
+    total = main + offset
 
     words = []
     if cfg["captions"].get("enabled", True) and "nosub" not in flags:
-        for w in plan.words:
-            if w["s"] >= start - 0.05 and w["e"] <= end + 0.3:
-                words.append(dict(w, s=w["s"] - start + offset, e=min(total, w["e"] - start + offset)))
+        last, before = len(segs) - 1, 0.0
+        for k, (s0, e0) in enumerate(segs):
+            lo = s0 - (0.05 if k == 0 else 0.0)
+            hi = e0 + (0.3 if k == last else 0.0)
+            for w in plan.words:
+                mid = (w["s"] + w["e"]) / 2
+                if (w["s"] >= lo and w["e"] <= hi) or (len(segs) > 1 and s0 <= mid < e0):
+                    ws = before + max(w["s"], s0) - s0 + offset
+                    we = before + min(w["e"], e0 if k < last else w["e"]) - s0 + offset
+                    words.append(dict(w, s=ws, e=min(total, max(we, ws + 0.04))))
+            before += e0 - s0
+        words.sort(key=lambda w: w["s"])
     credit = f"{ed.get('credit_prefix', 'Clip :')} {plan.credit}".strip() if plan.credit else ""
     ass = captions.build_ass(
         words, hook=plan.hook, context=plan.context, credit=credit, total=total, cfg=cfg,
@@ -215,12 +232,17 @@ def _render(plan: Plan, out: Path, cfg: dict, workdir: Path, flags: set) -> dict
     v_segs: list[str] = []
     a_segs: list[str] = []
 
-    def add_segment(ss: float, d: float, tag: str, punch_list: list[float], flash: bool) -> None:
+    def add_segment(ss: float, d: float, tag: str, punch_list: list[float], flash: bool,
+                    zoom: float = 1.0, fade_out: float = 0.12) -> None:
         nonlocal n_in
         cmd.extend(["-ss", f"{ss:.3f}", "-t", f"{d:.3f}", "-i", str(src)])
         i, n_in = n_in, n_in + 1
         last = f"v{tag}0"
         fc.append(layout_chain(f"{i}:v", last, layout, ed, plan.preset, fps_s, tag))
+        if zoom > 1.0:   # coupe franche : léger changement de cadre, comme un « jump cut »
+            zw, zh = int(W * zoom / 2) * 2, int(H * zoom / 2) * 2
+            fc.append(f"[{last}]scale={zw}:{zh},crop={W}:{H},setsar=1[v{tag}z]")
+            last = f"v{tag}z"
         if punch_list:
             fc.append(f"[{last}]{punch_filter(punch_list, ed, fps_s)},format=yuv420p[v{tag}1]")
             last = f"v{tag}1"
@@ -231,18 +253,23 @@ def _render(plan: Plan, out: Path, cfg: dict, workdir: Path, flags: set) -> dict
         if info["has_audio"]:
             fc.append(f"[{i}:a]aresample=48000:async=1:first_pts=0,"
                       f"aformat=sample_fmts=fltp:channel_layouts=stereo,afade=t=in:d=0.03,"
-                      f"afade=t=out:st={max(0.0, d - 0.12):.3f}:d=0.12[a{tag}]")
+                      f"afade=t=out:st={max(0.0, d - fade_out):.3f}:d={fade_out:.2f}[a{tag}]")
         else:
             fc.append(f"anullsrc=r=48000:cl=stereo,atrim=0:{d:.3f}[a{tag}]")
         a_segs.append(f"a{tag}")
 
     if teaser_at is not None:
         add_segment(teaser_at, td, "t", [], False)
-    add_segment(start, dur, "m", punches, teaser_at is not None)
+    jump = float(ed.get("jump_zoom", 1.07))
+    for k, (s0, e0) in enumerate(segs):
+        local = [p - s0 for p in punch_src if s0 <= p <= e0]
+        add_segment(s0, e0 - s0, f"m{k}", local, k == 0 and teaser_at is not None,
+                    zoom=jump if k % 2 == 1 else 1.0, fade_out=0.12 if k == len(segs) - 1 else 0.04)
 
-    if len(v_segs) == 2:
-        fc.append(f"[{v_segs[0]}][{v_segs[1]}]concat=n=2:v=1:a=0[vc]")
-        fc.append(f"[{a_segs[0]}][{a_segs[1]}]concat=n=2:v=0:a=1[ac]")
+    n = len(v_segs)
+    if n > 1:
+        fc.append("".join(f"[{v}]" for v in v_segs) + f"concat=n={n}:v=1:a=0[vc]")
+        fc.append("".join(f"[{a}]" for a in a_segs) + f"concat=n={n}:v=0:a=1[ac]")
     else:
         fc.append(f"[{v_segs[0]}]null[vc]")
         fc.append(f"[{a_segs[0]}]anull[ac]")
@@ -282,7 +309,8 @@ def _render(plan: Plan, out: Path, cfg: dict, workdir: Path, flags: set) -> dict
     run(cmd, cwd=workdir, timeout=2400)
     return {"duration": total, "layout": layout, "teaser": teaser_at is not None,
             "punches": len(punches), "sfx": len(events), "music": track.name if track else "",
-            "captions": len(words), "fallback": False}
+            "captions": len(words), "fallback": False, "cuts": len(segs) - 1,
+            "cut_s": round(dur - main, 1)}
 
 
 def contact_sheet(src: str | Path, ss: float, dur: float, out_jpg: str | Path,
