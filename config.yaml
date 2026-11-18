@@ -77,6 +77,8 @@ hunt:                               # le chasseur : trouve tout seul les clips d
   max_per_run: 3                    # clips montés par passage (3 passages par jour)
   max_candidates: 6                 # clips essayés au maximum par passage
   min_ai_score: 6                   # note minimale de Gemini (sur 10) pour garder un clip
+  game_boost:                       # jeux à privilégier : leur score est multiplié
+    "Grand Theft Auto VI": 3
   min_views: 150                    # vues voulues sur le clip d'origine
   min_views_floor: 40               # les jours calmes, la chasse descend jusque là (ces clips passent après)
   max_age_hours: 30

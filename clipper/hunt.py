@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import traceback
 from datetime import datetime, timezone
@@ -59,6 +60,13 @@ def made_today(seen: dict, streamer: str) -> int:
 
 # ---------------------------------------------------------------- Tri
 
+def game_key(name: str) -> str:
+    """« Grand Theft Auto VI », « GTA 6 », « GTA VI (GTA) » → « gta6 » : un nom par jeu."""
+    n = re.sub(r"\(.*?\)", "", str(name).lower())
+    n = re.sub(r"[^a-z0-9]", "", n).replace("grandtheftauto", "gta")
+    return {"gtavi": "gta6", "gtav": "gta5"}.get(n, n)
+
+
 def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
          now: datetime | None = None, stats: dict | None = None) -> list[tuple[float, Found, dict, str]]:
     """Clips retenus, du plus prometteur au moins prometteur : (score, clip, fiche streamer, motif).
@@ -66,6 +74,7 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
     `stats`, si fourni, compte les clips écartés par motif (affiché dans le journal de la chasse).
     """
     stats = {} if stats is None else stats
+    boosts = {game_key(k): float(v) for k, v in (cfg["hunt"].get("game_boost") or {}).items()}
 
     def drop(reason: str) -> None:
         stats[reason] = stats.get(reason, 0) + 1
@@ -109,6 +118,10 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
         why = f"{f.views} vues en {f.age_hours(now):.0f} h"
         if f.views < wanted_views:
             why += ", peu de vues"
+        boost = boosts.get(game_key(f.game), 1.0)
+        if boost != 1.0:
+            score *= boost
+            why += f", {f.game} prioritaire"
         if preset:
             score *= float(hc.get("allowlist_boost", 2.0))
             why += ", streamer suivi"

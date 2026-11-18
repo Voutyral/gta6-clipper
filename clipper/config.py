@@ -74,6 +74,7 @@ DEFAULTS: dict = {
         "max_per_run": 3,
         "max_candidates": 6,
         "min_ai_score": 6,
+        "game_boost": {"Grand Theft Auto VI": 3},
         "min_views": 150,
         "min_views_floor": 40,
         "max_age_hours": 30,
