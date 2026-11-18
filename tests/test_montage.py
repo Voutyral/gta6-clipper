@@ -170,3 +170,59 @@ def test_nudity_is_flagged_not_blocked_except_for_campaigns_and_hate_always_bloc
     assert "haine" in qc.RISK_LABELS
     text = ai.EVAL_SYSTEM.format(game="GTA 6", min_s=15, max_s=45, lang="fr")
     assert '"haine"' in text and "pas les simples gros mots" in text and "sorti le 19 novembre 2026" in text
+
+
+def test_gemini_moves_to_the_next_model_when_a_daily_quota_is_spent(monkeypatch):
+    import requests as rq
+    ai._state.update(gemini_model="gemini-3-flash-preview", gemini_catalog=None, gemini_dry=set())
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+
+    class R:
+        def __init__(self, code, body):
+            self.status_code, self._b = code, body
+            self.text = json.dumps(body)
+
+        def json(self):
+            return self._b
+
+        def raise_for_status(self):
+            pass
+
+    catalog = {"models": [{"name": "models/gemini-3.5-flash-lite", "supportedGenerationMethods": ["generateContent"]},
+                          {"name": "models/gemini-2.5-flash-preview-tts", "supportedGenerationMethods": ["generateContent"]},
+                          {"name": "models/gemini-3.8-flash", "supportedGenerationMethods": ["generateContent"]}]}
+    asked: list[str] = []
+
+    def post(url, **k):
+        model = url.split("/models/")[1].split(":")[0]
+        asked.append(model)
+        if model in ("gemini-3-flash-preview", "gemini-3.8-flash"):
+            return R(429, {"error": {"code": 429, "details": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}})
+        return R(200, {"candidates": [{"content": {"parts": [{"text": "{\"score\": 7}"}]}}]})
+
+    monkeypatch.setattr(rq, "get", lambda *a, **k: R(200, catalog))
+    monkeypatch.setattr(rq, "post", post)
+    monkeypatch.setattr(ai.time, "sleep", lambda s: None)
+    cfg = load_config()
+    cfg["ai"]["gemini_models"] = ["gemini-3-flash-preview", "gemini-3.8-flash"]
+    assert ai._gemini(cfg, [{"text": "x"}], True) == "{\"score\": 7}"
+    assert asked == ["gemini-3-flash-preview", "gemini-3.8-flash", "gemini-3.5-flash-lite"]   # pas de modèle vocal
+    asked.clear()
+    assert ai._gemini(cfg, [{"text": "x"}], True) and asked == ["gemini-3.5-flash-lite"]   # les épuisés sont sautés
+    ai._state.update(gemini_model=None, gemini_catalog=None, gemini_dry=set())
+
+
+def test_unknown_webcam_keeps_the_whole_game_picture():
+    from clipper.pipeline import Candidate, build_plan
+    from clipper.render import layout_chain
+    from clipper.request import ClipRequest
+    ed = load_config()["edit"]
+    from pathlib import Path
+    cand = Candidate(Path("a.mp4"), 100.0, 140.0, None, 1.0, 0.0, locked=True)
+    info = {"title": "Session GTA 6", "webpage_url": "https://x.tv/v", "channel": "Bob"}
+    blind = build_plan(cand, None, [], ClipRequest(url="https://x.tv/v"), info, load_config(), {}, "@Bob", 0)
+    assert "plein_cadre" in blind.flags                                          # l'IA n'a pas répondu
+    seen = build_plan(cand, {"score": 7}, [], ClipRequest(url="https://x.tv/v"), info, load_config(), {}, "@Bob", 0)
+    assert "plein_cadre" not in seen.flags                                       # l'IA a regardé : pas de webcam
+    assert "scale=1620:-2" in layout_chain("0:v", "v0", "blur", ed, {}, "60", "0")       # zoom 1.5 : côtés rognés
+    assert "scale=1080:-2" in layout_chain("0:v", "v0", "blur", dict(ed, zoom=1.0), {}, "60", "0")

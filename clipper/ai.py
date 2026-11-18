@@ -21,7 +21,46 @@ from .util import log
 
 GEMINI = "https://generativelanguage.googleapis.com"
 _state: dict = {"gemini_model": None, "github_model": None, "github_catalog": None,
-                "off": set(), "fails": {}}
+                "gemini_catalog": None, "gemini_dry": set(), "off": set(), "fails": {}}
+
+# Modèles Gemini du compte qu'on peut ajouter d'office en secours (chacun a son propre quota
+# gratuit par jour : 20 requêtes pour un Flash, 500 pour un Flash-Lite en novembre 2026).
+_SPECIAL = ("image", "tts", "audio", "live", "embedding", "8b", "native", "computer", "robotics", "thinking")
+
+
+def _gemini_catalog(key: str) -> list[str]:
+    """Modèles Flash et Flash-Lite ouverts à ce compte, du plus récent au plus ancien, Flash avant Lite."""
+    try:
+        r = requests.get(f"{GEMINI}/v1beta/models", params={"pageSize": 1000}, timeout=30,
+                         headers={"x-goog-api-key": key})
+        r.raise_for_status()
+        items = r.json().get("models") or []
+    except (requests.RequestException, ValueError):
+        return []
+    names = []
+    for m in items:
+        name = str(m.get("name", "")).removeprefix("models/")
+        if ("generateContent" in (m.get("supportedGenerationMethods") or []) and name.startswith("gemini-")
+                and "-flash" in name and not any(w in name for w in _SPECIAL)):
+            names.append(name)
+
+    def rank(n: str) -> tuple:
+        v = re.search(r"gemini-(\d+(?:\.\d+)?)", n)
+        return ("lite" in n, -(float(v.group(1)) if v else 0.0), "preview" in n, n)
+    return sorted(set(names), key=rank)
+
+
+def _gemini_order(cfg: dict, key: str) -> list[str]:
+    """Celui qui a répondu en dernier d'abord, puis config.yaml, puis les autres modèles du compte ;
+    jamais un modèle dont le quota du jour est épuisé."""
+    if _state["gemini_catalog"] is None:
+        _state["gemini_catalog"] = _gemini_catalog(key) if cfg["ai"].get("gemini_auto_models", True) else []
+    order = list(dict.fromkeys(list(cfg["ai"]["gemini_models"]) + _state["gemini_catalog"]))
+    sticky = _state["gemini_model"]
+    if sticky in order:
+        order.remove(sticky)
+        order.insert(0, sticky)
+    return [m for m in order if m not in _state["gemini_dry"]]
 
 
 def providers(cfg: dict) -> list[str]:
@@ -106,8 +145,7 @@ def _thinking(model: str, level: str) -> dict | None:
 
 def _gemini(cfg: dict, parts: list[dict], want_json: bool) -> str | None:
     key = os.environ["GEMINI_API_KEY"]
-    models = [_state["gemini_model"]] if _state["gemini_model"] else list(cfg["ai"]["gemini_models"])
-    for model in models:
+    for model in _gemini_order(cfg, key):
         for attempt in range(3):
             gen: dict = {"responseMimeType": "application/json"} if want_json else {}
             think = _thinking(model, cfg["ai"].get("gemini_thinking", "low"))
@@ -144,9 +182,17 @@ def _gemini(cfg: dict, parts: list[dict], want_json: bool) -> str | None:
                     return text
                 log(f"Gemini {model} : réponse vide ou bloquée ({r.text[:300]})")
                 break
+            if r.status_code == 429 and ("PerDay" in r.text or "per day" in r.text.lower()):
+                log(f"Gemini {model} : quota du jour épuisé, modèle suivant.")
+                _state["gemini_dry"].add(model)
+                if _state["gemini_model"] == model:
+                    _state["gemini_model"] = None
+                break
             if r.status_code in (429, 500, 503) and attempt < 2:
                 time.sleep(20 if r.status_code == 429 else 8)
                 continue
+            if r.status_code == 429:   # toujours refusé après deux pauses : on n'insiste plus aujourd'hui
+                _state["gemini_dry"].add(model)
             log(f"Gemini {model} : HTTP {r.status_code} {r.text[:200]}")
             break
     return None

@@ -170,3 +170,4 @@ def black_lead(path: str | Path, ss: float, dur: float = 4.0) -> float:
                 continue
             return end if start < 0.05 else 0.0
     return 0.0
+

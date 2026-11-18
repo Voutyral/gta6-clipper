@@ -246,7 +246,8 @@ def _render(plan: Plan, out: Path, cfg: dict, workdir: Path, flags: set) -> dict
         cmd.extend(["-ss", f"{ss:.3f}", "-t", f"{d:.3f}", "-i", str(src)])
         i, n_in = n_in, n_in + 1
         last = f"v{tag}0"
-        fc.append(layout_chain(f"{i}:v", last, layout, ed, plan.preset, fps_s, tag))
+        fc.append(layout_chain(f"{i}:v", last, layout, dict(ed, zoom=1.0) if "plein_cadre" in flags else ed,
+                               plan.preset, fps_s, tag))
         if zoom > 1.0:   # coupe franche : léger changement de cadre, comme un « jump cut »
             zw, zh = int(W * zoom / 2) * 2, int(H * zoom / 2) * 2
             fc.append(f"[{last}]scale={zw}:{zh},crop={W}:{H},setsar=1[v{tag}z]")

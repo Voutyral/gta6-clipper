@@ -296,6 +296,11 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
         plan_cuts = cuts.tighten(c.src, start, end, c.words, cfg["edit"], plan_cuts)
     if ev and ev.get("captions_on_screen") is True:
         flags.add("nosub")   # le stream affiche déjà ses sous-titres : pas de deuxième ligne par-dessus
+    # Sans réponse de l'IA (quota épuisé…), on ne sait pas où est la webcam : l'image du jeu reste
+    # entière, pour ne jamais rogner une webcam qu'on n'a pas vue. (Un détecteur de visages a été
+    # essayé le 19/11 : il confond les visages de GTA 6 avec la webcam et rate les vraies.)
+    if not ev and not preset.get("facecam") and not preset.get("layout") and not req.layout:
+        flags.add("plein_cadre")
     # Moment d'histoire permis par une campagne : alerte sur la couverture, rien de dévoilé,
     # et pas d'aperçu du moment fort en ouverture (il révélerait la chute dès la première image).
     spoiler = bool(preset.get("story_ok")) and "spoiler" in risks
