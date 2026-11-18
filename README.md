@@ -91,6 +91,14 @@ Avec la clé Gemini, un lien YouTube public est lu directement chez Google (imag
 
 Les autres clips trouvés par la chasse sont montés avec la mention « accord à vérifier ». Pour ne garder que les streamers de la liste : `allowlist_only: true` dans `config.yaml`.
 
+### Campagnes rémunérées (Content Rewards)
+
+Un bloc `campaign:` sous un streamer (exemple : Dasgas Dom) applique le brief de la campagne. La chasse ne prend que la source autorisée (stream daté, jeu demandé, même live après minuit) et la fait passer avant tout le reste, jusqu'à la date limite. Le montage suit la langue du streamer, écrit son crédit, ajoute les hashtags exigés et la mention `#ad`, coupe la musique si demandé, et met « SPOILER WARNING » sur la couverture d'un moment d'histoire sans rien dévoiler. Dans la galerie, le bouton **Légende** copie la légende complète, et la fiche rappelle les plateformes acceptées, le réglage « contenu commercial » et le délai de soumission du lien. Les jours de stream, une ligne `cron` de `chasse.yml` ajoute des passages réservés aux campagnes.
+
+## Français et anglais
+
+La chasse prend les clips français et anglais (`require_languages` et `twitch.languages` dans `config.yaml`), avec une recherche Twitch par langue et une alternance des deux langues, pour que l'anglais, bien plus vu, ne prenne pas toute la place. Accroche, titre et légende sont écrits dans la langue parlée du clip (`metadata.language: auto`). Dans la galerie, chaque clip porte un badge FR ou EN, et le bouton **FR + EN** filtre par langue. Pour revenir au français seul : `[fr]` sur ces deux lignes.
+
 ## Options avancées
 
 ### Envoi automatique sur YouTube
