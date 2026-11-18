@@ -319,7 +319,7 @@ Réponds uniquement par un objet JSON avec ces clés :
 - "cuts" : passages à retirer pour un montage plus nerveux, liste de [début, fin] en secondes dans l'extrait, à l'intérieur de la coupe conseillée : attente, silence où il ne se passe rien, hésitation, répétition, passage qui n'aide pas à comprendre. Ne retire jamais la mise en place nécessaire, l'action principale ni la chute ; coupe entre deux phrases. [] si tout est utile
 - "game" : nom du jeu à l'écran tel qu'on l'écrit couramment (« GTA 6 », « GTA 5 », « Fortnite »…), "" si aucun jeu
 
-Règles : écris en {lang}, sauf "transcript" qui reste dans la langue parlée. N'invente aucun fait absent de l'extrait. Pas de titre mensonger. Aucun spoiler dans le titre ni dans l'accroche."""
+Règles : langue de "hook", "context", "title", "description" et "tags" : {lang}. "transcript" reste dans la langue parlée. N'invente aucun fait absent de l'extrait. Pas de titre mensonger. Aucun spoiler dans le titre ni dans l'accroche."""
 
 
 def evaluate(cfg: dict, *, text: str, dur: float, peak: float | None, title: str, credit: str,

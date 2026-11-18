@@ -195,9 +195,13 @@ def discover(cfg: dict, streamers: list[dict]) -> tuple[list[Found], list[str]]:
 
     tw = hc.get("twitch") or {}
     if tw.get("enabled", True):
+        # Une recherche par langue : sinon les clips anglais, bien plus vus, noient les français.
+        langs = [str(x).lower() for x in tw.get("languages") or [] if str(x).strip()]
         for game in tw.get("games") or []:
-            collect(f"Twitch « {game} »", twitch_game_clips, game, period=period,
-                    languages=tw.get("languages") or [], first=int(tw.get("per_game", 30)))
+            for group in ([[x] for x in langs] if langs else [[]]):
+                label = f"Twitch « {game} »" + (f" {group[0].upper()}" if group else "")
+                collect(label, twitch_game_clips, game, period=period, languages=group,
+                        first=int(tw.get("per_game", 30)))
     kk = hc.get("kick") or {}
     if kk.get("enabled", True):
         for slug in kk.get("categories") or []:

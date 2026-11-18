@@ -42,7 +42,8 @@ class Candidate:
     origin: float            # position du début du fichier dans la vidéo d'origine
     locked: bool = False     # plage choisie par l'utilisateur : on ne la retaille pas
     words: list = field(default_factory=list)
-    lang: str = ""
+    lang: str = ""           # langue parlée
+    text_lang: str = ""      # langue demandée à l'IA pour les textes, si elle était connue
 
 
 @dataclass
@@ -153,6 +154,30 @@ def snap_to_words(start: float, end: float, words: list[dict], lo: float, hi: fl
     return start, end
 
 
+def text_lang(req: ClipRequest, preset: dict, cfg: dict, spoken: str = "") -> str:
+    """Langue des textes d'un clip (accroche, titre, légende).
+
+    Imposée par la demande (#en) ou par la fiche du streamer ; sinon, avec `metadata.language: auto`,
+    c'est celle qu'on parle dans le clip, si elle fait partie de `metadata.languages`.
+    """
+    forced = req.lang or campaign.language(preset)
+    if forced:
+        return forced
+    meta = cfg["metadata"]
+    want = str(meta.get("language") or "fr").strip().lower()
+    if want != "auto":
+        return want
+    ok = [str(x).lower() for x in meta.get("languages") or ["fr", "en"]] or ["fr"]
+    s = str(spoken or "").strip().lower()[:2]
+    return s if s in ok else ok[0]
+
+
+def follows_speech(req: ClipRequest, preset: dict, cfg: dict) -> bool:
+    """Vrai si la langue des textes dépend de ce qu'on entend dans le clip."""
+    return not (req.lang or campaign.language(preset)) and \
+        str(cfg["metadata"].get("language") or "fr").strip().lower() == "auto"
+
+
 def clean_hook(text: str) -> str:
     text = " ".join(captions.strip_emoji(text).replace('"', "").split())
     words = text.split()
@@ -180,12 +205,13 @@ def build_description(desc: str, credit: str, url: str, cfg: dict, game: str = "
     if spoiler:
         lines.insert(0, campaign.spoiler_line(lang))
     extra = campaign.caption_lines(preset)
+    src = "Source :" if lang == "fr" else "Source:"
     if extra:                       # la fiche du streamer dit comment le créditer (campagne)
         lines.extend(extra)
     elif not fetch.is_local(url):
-        lines.append(f"Source : {credit} ({url})" if credit else f"Source : {url}")
+        lines.append(f"{src} {credit} ({url})" if credit else f"{src} {url}")
     elif credit:
-        lines.append(f"Source : {credit}")
+        lines.append(f"{src} {credit}")
     lines.append(" ".join(campaign.hashtags(preset) or hashtags_for(game, cfg)))
     return "\n\n".join(lines)
 
@@ -208,7 +234,8 @@ def facecam_box(raw) -> dict | None:
 def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipRequest, info: dict,
                cfg: dict, preset: dict, credit: str, idx: int) -> Plan:
     det, meta = cfg["detection"], cfg["metadata"]
-    lang_out = req.lang or campaign.language(preset) or meta["language"]
+    # Langue des textes : celle demandée à l'IA si elle était connue, sinon celle qu'elle a entendue.
+    lang_out = c.text_lang or text_lang(req, preset, cfg, c.lang or str((ev or {}).get("spoken_lang") or ""))
     dur = c.end - c.start
     start, end, score = c.start, c.end, float(c.score)
     ai_score = None
@@ -261,7 +288,8 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
     if campaign.off(preset.get("music", "auto")):
         flags.add("nomusic")
     if not hook:
-        hooks = preset.get("fallback_hooks") or meta["fallback_hooks"]
+        hooks = (preset.get("fallback_hooks") or (meta.get("fallback_hooks_by_lang") or {}).get(lang_out)
+                 or meta["fallback_hooks"])
         hook = str(hooks[idx % len(hooks)])
     if not title:
         base = (info.get("title") or meta["game"]).strip()
@@ -277,7 +305,7 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
                                       preset=preset, lang=lang_out, spoiler=spoiler),
         tags=tags, layout=req.layout or "auto", preset=preset, flags=flags, score=score,
         what=what, risks=risks, source_url=info.get("webpage_url") or req.url,
-        source_time=c.origin + start, lang=c.lang, ai_score=ai_score, cuts=plan_cuts)
+        source_time=c.origin + start, lang=c.lang, ai_score=ai_score, cuts=plan_cuts, text_lang=lang_out)
 
 
 def ai_fix_words(c: Candidate, ev: dict, req: ClipRequest, cap: dict) -> bool:
@@ -309,7 +337,8 @@ def ai_fix_words(c: Candidate, ev: dict, req: ClipRequest, cap: dict) -> bool:
 def plan_candidates(cands: list[Candidate], req: ClipRequest, info: dict, cfg: dict, preset: dict,
                     credit: str, work: Path, n: int) -> tuple[list[Plan], str]:
     """Transcrit, évalue (IA si disponible) et retient les `n` meilleurs passages."""
-    lang_out = req.lang or campaign.language(preset) or cfg["metadata"]["language"]
+    auto_lang = follows_speech(req, preset, cfg)
+    ok_langs = [str(x).lower() for x in cfg["metadata"].get("languages") or ["fr", "en"]] or ["fr"]
     use_ai = bool(ai.providers(cfg)) and "noai" not in req.flags
     cap = cfg["captions"]
     words_vocab = vocab.for_clip(vocab.load_vocab(), credit, req.meta.get("streamer", ""),
@@ -335,6 +364,14 @@ def plan_candidates(cands: list[Candidate], req: ClipRequest, info: dict, cfg: d
         if c.peak is not None and not peaks:
             peaks = [c.peak]
         ev = None
+        # Langue des textes : connue d'avance (imposée, ou bien entendue à la transcription),
+        # sinon l'IA écrit dans la langue qu'elle entend.
+        if not auto_lang or c.lang in ok_langs:
+            c.text_lang = text_lang(req, preset, cfg, c.lang)
+            lang_out = c.text_lang
+        else:
+            lang_out = (f"celle qu'on parle dans l'extrait si c'est {' ou '.join(ok_langs)}, "
+                        f"sinon {ok_langs[0]}")
         if use_ai:
             video = None
             if "gemini" in ai.providers(cfg):
@@ -402,7 +439,7 @@ def process_request(req: ClipRequest, cfg: dict, streamers: list[dict], work: Pa
             duration=check["duration"], size_mb=check["size_mb"], credit=credit,
             source_url=plan.source_url, facts=facts, provider=provider,
             paid=bool(preset.get("paid")),
-            lang=req.lang or campaign.language(preset) or cfg["metadata"]["language"], meta=meta))
+            lang=plan.text_lang or text_lang(req, preset, cfg, plan.lang), meta=meta))
     return results
 
 
@@ -419,7 +456,7 @@ def write_sidecars(res: Result) -> tuple[Path, Path | None]:
         "description": res.description, "tags": res.tags, "hook": res.hook, "go": res.go,
         "problems": res.problems, "notes": res.notes, "credit": res.credit,
         "source_url": res.source_url, "duration": round(res.duration, 1), "size_mb": round(res.size_mb, 1),
-        "provider": res.provider, "paid": res.paid,
+        "provider": res.provider, "paid": res.paid, "lang": res.lang,
         "made_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), **res.meta,
     }
     side = res.path.with_suffix(".json")

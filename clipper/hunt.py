@@ -148,6 +148,8 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
     # Campagnes rémunérées d'abord, puis langue connue, puis les clips au dessus du seuil de vues,
     # puis la vitesse.
     out.sort(key=lambda t: (not campaign.of(t[2]), "langue à vérifier" in t[3], "peu de vues" in t[3], -t[0]))
+    if hc.get("mix_languages", True) and len(wanted_langs) > 1:
+        out = mix_languages(out, wanted_langs)
     unknown_cap = int(hc.get("max_unknown_language", 1))
     picked, count, unknown = [], {}, 0
     for item in out:
@@ -164,6 +166,39 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
         count[s] = count.get(s, 0) + 1
         picked.append(item)
     return picked
+
+
+def clip_language(f: Found, wanted: list[str]) -> str:
+    """Langue d'un clip : donnée par Twitch, devinée sur le titre pour Kick, « ? » si inconnue."""
+    if f.language:
+        return f.language
+    guess = guess_language([{"raw": w} for w in f.title.split()])
+    return guess if guess in wanted else "?"
+
+
+def mix_languages(items: list, wanted: list[str]) -> list:
+    """Alterne les langues (un clip anglais, un français…) à qualité égale.
+
+    Les campagnes restent en tête ; ensuite chaque palier (vues suffisantes, peu de vues,
+    langue à vérifier) est alterné à part, pour qu'un clip faible ne passe pas devant un bon.
+    """
+    head = [t for t in items if campaign.of(t[2])]
+    tiers: dict[int, list] = {}
+    for t in items:
+        if not campaign.of(t[2]):
+            tier = 2 if "langue à vérifier" in t[3] else (1 if "peu de vues" in t[3] else 0)
+            tiers.setdefault(tier, []).append(t)
+    out = list(head)
+    for tier in sorted(tiers):
+        groups: dict[str, list] = {}
+        for t in tiers[tier]:   # ordre des groupes : celui du meilleur clip de chaque langue
+            groups.setdefault(clip_language(t[1], wanted), []).append(t)
+        queues = list(groups.values())
+        while any(queues):
+            for q in queues:
+                if q:
+                    out.append(q.pop(0))
+    return out
 
 
 def to_request(f: Found, preset: dict, cfg: dict, url: str | None = None) -> ClipRequest:

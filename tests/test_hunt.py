@@ -72,6 +72,7 @@ def test_discover_keeps_going_when_a_source_fails(monkeypatch):
 
 def test_rank_prefers_fast_risers_and_applies_filters():
     cfg = load_config()
+    cfg["hunt"]["require_languages"] = ["fr"]          # chasse en français seul
     clips = [
         found(1, views=600, hours=20),                    # beaucoup de vues mais vieux
         found(2, views=400, hours=1, streamer="alice"),   # récent qui décolle
@@ -89,6 +90,7 @@ def test_rank_prefers_fast_risers_and_applies_filters():
 
 def test_kick_title_in_another_language_is_dropped_before_download():
     cfg = load_config()
+    cfg["hunt"]["require_languages"] = ["fr"]          # chasse en français seul
     clips = [found(1, views=900, hours=2, streamer="saab", lang="", platform="kick",
                    title="Dawson sees Chatty's missed calls to Ray Mond and the boys"),
              found(2, views=900, hours=2, streamer="momo", lang="", platform="kick", title="OH LA DINGUERIE")]

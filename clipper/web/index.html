@@ -214,6 +214,7 @@
   <div class="tabs" role="group" aria-label="Filtre">
     <button class="tab" id="tab-todo" aria-pressed="true">À poster <b id="n-todo">0</b></button>
     <button class="tab" id="tab-done" aria-pressed="false">Postés <b id="n-done">0</b></button>
+    <button class="pick" id="langf" aria-pressed="false" hidden>FR + EN</button>
     <button class="pick" id="pick" aria-pressed="false">Choisir</button>
   </div>
 </header>
@@ -237,7 +238,10 @@
   const sheet = document.getElementById("sheet");
   const dock = document.getElementById("dock");
   const $ = (id) => document.getElementById(id);
-  let clips = [], view = "todo", data = {};
+  let clips = [], view = "todo", data = {}, langView = "all";   // langView : all, fr ou en
+  const langOf = (c) => (c.lang || "fr").toLowerCase();
+  const langOk = (c) => langView === "all" || langOf(c) === langView;
+  const inView = (c) => langOk(c) && (view === "done") === memory.has(c.file);
   let selecting = false, picked = [], batch = null;   // batch : vidéos chargées pour la sélection en cours
   const files = new Map();                              // vidéos déjà chargées, par nom de fichier
 
@@ -392,6 +396,7 @@
       el("div", { class: "postedmark" }, el("span", {}, "POSTÉ")));
     const plat = (c.platform || "").toLowerCase();
     const meta = el("div", { class: "meta" },
+      el("span", {}, langOf(c).toUpperCase()),
       plat ? el("span", { class: "plat " + plat }, plat) : null,
       c.views != null ? el("span", {}, `${Number(c.views).toLocaleString("fr-FR")} vues`) : null,
       el("span", {}, `${Math.round(c.duration || 0)} s`),
@@ -428,7 +433,8 @@
   function tile(c, i) {
     const posted = memory.has(c.file);
     const order = picked.indexOf(c.file);
-    const meta = [(c.platform || "").toLowerCase(), `${Math.round(c.duration || 0)} s`, ago(c.made_at)].filter(Boolean).join(" · ");
+    const meta = [langOf(c).toUpperCase(), (c.platform || "").toLowerCase(), `${Math.round(c.duration || 0)} s`,
+                  ago(c.made_at)].filter(Boolean).join(" · ");
     const t = el("article", { class: "tile" + (posted ? " posted" : "") + (order >= 0 ? " sel" : ""),
                               style: `animation-delay:${Math.min(i, 8) * 45}ms`, role: "button",
                               "aria-label": (c.title || "Clip") + (order >= 0 ? " (choisi)" : "") },
@@ -527,14 +533,15 @@
   window.addEventListener("popstate", closeSheet);
 
   function count() {
-    const done = clips.filter((c) => memory.has(c.file)).length;
-    document.getElementById("n-todo").textContent = clips.length - done;
+    const pool = clips.filter(langOk);
+    const done = pool.filter((c) => memory.has(c.file)).length;
+    document.getElementById("n-todo").textContent = pool.length - done;
     document.getElementById("n-done").textContent = done;
   }
 
   function render() {
     list.replaceChildren();
-    const shown = clips.filter((c) => (view === "done") === memory.has(c.file));
+    const shown = clips.filter(inView);
     count();
     updateDock();
     if (!shown.length) {
@@ -551,9 +558,16 @@
   }
 
   $("pick").addEventListener("click", () => setSelecting(!selecting));
+  $("langf").addEventListener("click", () => {
+    langView = { all: "fr", fr: "en", en: "all" }[langView];
+    $("langf").textContent = langView === "all" ? "FR + EN" : langView.toUpperCase();
+    $("langf").setAttribute("aria-pressed", langView !== "all");
+    picked = []; batch = null;
+    render();
+  });
   $("dock-go").addEventListener("click", dockGo);
   $("dock-all").addEventListener("click", () => {
-    const shown = clips.filter((c) => (view === "done") === memory.has(c.file)).map((c) => c.file);
+    const shown = clips.filter(inView).map((c) => c.file);
     picked = picked.length >= Math.min(shown.length, MAX_PICK) ? [] : shown.slice(0, MAX_PICK);
     batch = null;
     if (shown.length > MAX_PICK) toast(`Les ${MAX_PICK} plus récents`);
@@ -575,6 +589,7 @@
     .then((d) => {
       data = d || {};
       clips = data.clips || [];
+      $("langf").hidden = new Set(clips.map(langOf)).size < 2;
       const next = nextRun(data.schedule_utc);
       document.getElementById("stamp").innerHTML = "";
       document.getElementById("stamp").append(

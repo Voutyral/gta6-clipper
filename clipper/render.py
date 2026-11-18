@@ -45,6 +45,7 @@ class Plan:
     lang: str = ""
     ai_score: float | None = None
     cuts: list = field(default_factory=list)   # plages [début, fin] à retirer (temps source)
+    text_lang: str = ""   # langue des textes incrustés et de la légende (fr, en)
 
 
 def _facecam(preset: dict | None):
@@ -203,7 +204,11 @@ def _render(plan: Plan, out: Path, cfg: dict, workdir: Path, flags: set) -> dict
                     words.append(dict(w, s=ws, e=min(total, max(we, ws + 0.04))))
             before += e0 - s0
         words.sort(key=lambda w: w["s"])
-    prefix = (plan.preset or {}).get("credit_prefix", ed.get("credit_prefix", "Clip :"))
+    prefix = (plan.preset or {}).get("credit_prefix")
+    if prefix is None:
+        prefix = str(ed.get("credit_prefix", "Clip :"))
+        if plan.text_lang and plan.text_lang != "fr":
+            prefix = prefix.replace(" :", ":")   # « Clip : » en français, « Clip: » ailleurs
     credit = f"{prefix or ''} {plan.credit}".strip() if plan.credit else ""
     ass = captions.build_ass(
         words, hook=plan.hook, context=plan.context, credit=credit, total=total, cfg=cfg,

@@ -11,13 +11,16 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULTS: dict = {
     "metadata": {
         "game": "GTA 6",
-        "language": "fr",
+        "language": "auto",                  # auto : textes dans la langue parlée du clip
+        "languages": ["fr", "en"],           # langues possibles des textes (la première par défaut)
         "hashtags": ["#GTA6", "#GTAVI", "#Shorts"],
         "hashtags_by_game": {"Grand Theft Auto VI": ["#GTA6", "#GTAVI"],
                              "Grand Theft Auto V": ["#GTA5", "#GTAV", "#GTARP"]},
         "hashtags_common": ["#Shorts"],
         "fallback_hooks": ["ATTENDS LA FIN", "PERSONNE S'Y ATTENDAIT", "IL A VRAIMENT FAIT ÇA",
                            "GTA 6 EST FOU"],
+        "fallback_hooks_by_lang": {"en": ["WAIT FOR IT", "NOBODY SAW THIS COMING", "HE REALLY DID THAT",
+                                          "GTA 6 IS INSANE"]},
     },
     "detection": {
         "clips_per_video": 2,
@@ -76,9 +79,10 @@ DEFAULTS: dict = {
     "hunt": {
         "enabled": True,
         "period": "24hr",
-        "max_per_run": 3,
+        "max_per_run": 4,
         "campaign_max_per_run": 5,
-        "max_candidates": 6,
+        "max_candidates": 8,
+        "mix_languages": True,
         "min_ai_score": 6,
         "game_boost": {"Grand Theft Auto VI": 3},
         "min_views": 150,
@@ -93,9 +97,9 @@ DEFAULTS: dict = {
         "blocked_streamers": [],
         "exclude_words": ["spoiler", "ending", "fin du jeu", "final mission", "dernière mission",
                           "cinématique", "cinematic", "cutscene"],
-        "require_languages": ["fr"],
+        "require_languages": ["fr", "en"],
         "twitch": {"enabled": True, "games": ["Grand Theft Auto VI", "Grand Theft Auto V"],
-                   "languages": ["fr"], "per_game": 30},
+                   "languages": ["fr", "en"], "per_game": 30},
         "kick": {"enabled": True, "categories": ["grand-theft-auto-vi", "grand-theft-auto-v"]},
     },
     "gallery": {"days": 7, "max_clips": 40, "max_mb": 900, "hide": [],

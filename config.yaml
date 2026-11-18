@@ -3,7 +3,8 @@
 
 metadata:
   game: "GTA 6"
-  language: fr                      # langue des titres, accroches et descriptions
+  language: auto                    # auto : titres, accroches et descriptions dans la langue parlée du clip
+  languages: [fr, en]               # langues possibles (la première sert si on ne parle pas, ou une autre langue)
   hashtags: ["#GTA6", "#GTAVI", "#Shorts"]       # pour les clips envoyés à la main
   hashtags_by_game:                 # selon le jeu du clip trouvé par la chasse
     "Grand Theft Auto VI": ["#GTA6", "#GTAVI"]
@@ -14,6 +15,8 @@ metadata:
     - "PERSONNE S'Y ATTENDAIT"
     - "IL A VRAIMENT FAIT ÇA"
     - "GTA 6 EST FOU"
+  fallback_hooks_by_lang:           # les mêmes pour les clips anglais
+    en: ["WAIT FOR IT", "NOBODY SAW THIS COMING", "HE REALLY DID THAT", "GTA 6 IS INSANE"]
 
 detection:
   clips_per_video: 2                # clips tirés d'une longue vidéo (x3 dans la demande pour changer)
@@ -79,9 +82,10 @@ youtube:
 
 hunt:                               # le chasseur : trouve tout seul les clips du moment
   enabled: true
-  max_per_run: 3                    # clips montés par passage (3 passages par jour)
+  max_per_run: 4                    # clips montés par passage (3 passages par jour)
   campaign_max_per_run: 5           # quand une campagne de streamers.yaml a des clips à monter
-  max_candidates: 6                 # clips essayés au maximum par passage
+  max_candidates: 8                 # clips essayés au maximum par passage
+  mix_languages: true               # alterne français et anglais (sinon l'anglais, plus vu, prend tout)
   min_ai_score: 6                   # note minimale de Gemini (sur 10) pour garder un clip
   game_boost:                       # jeux à privilégier : leur score est multiplié
     "Grand Theft Auto VI": 3
@@ -95,11 +99,11 @@ hunt:                               # le chasseur : trouve tout seul les clips d
   allowlist_boost: 2.0              # priorité donnée aux streamers de streamers.yaml
   blocked_streamers: []             # pseudos à ne jamais prendre
   exclude_words: [spoiler, ending, "fin du jeu", "final mission", "dernière mission", cinématique, cinematic, cutscene]
-  require_languages: [fr]           # langue parlée exigée (vérifiée à la transcription pour Kick)
+  require_languages: [fr, en]       # langues parlées acceptées (vérifiées à la transcription pour Kick)
   twitch:
     enabled: true
     games: ["Grand Theft Auto VI", "Grand Theft Auto V"]
-    languages: [fr]                 # ajoute en pour les clips anglais : [fr, en]
+    languages: [fr, en]             # une recherche par langue ; retire en pour revenir au français seul
     per_game: 30
   kick:
     enabled: true
