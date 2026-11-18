@@ -156,5 +156,20 @@ def card(preset: dict | None) -> dict:
             "reminders": [str(r) for r in camp.get("reminders") or [] if str(r).strip()]}
 
 
+def tuned(cfg: dict, preset: dict | None) -> dict:
+    """Réglages de détection propres au streamer (durée des clips d'une campagne, par exemple)."""
+    det = (preset or {}).get("detection")
+    if isinstance(det, dict) and det:
+        return dict(cfg, detection=dict(cfg["detection"], **det))
+    return cfg
+
+
+def caption(preset: dict | None, title: str, description: str) -> str:
+    """Légende complète à coller : mention de partenariat en tête (là où on la voit), puis le reste."""
+    disclosure = str((preset or {}).get("disclosure") or "").strip()
+    head = f"{disclosure} · {title}" if disclosure else title
+    return f"{head}\n\n{description}"
+
+
 def off(value) -> bool:
     return str(value).strip().lower() in OFF

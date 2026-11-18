@@ -287,6 +287,8 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
         flags.add("noteaser")
     if campaign.off(preset.get("music", "auto")):
         flags.add("nomusic")
+    if campaign.off(preset.get("sfx", "auto")):
+        flags.add("nosfx")
     if not hook:
         hooks = (preset.get("fallback_hooks") or (meta.get("fallback_hooks_by_lang") or {}).get(lang_out)
                  or meta["fallback_hooks"])
@@ -409,6 +411,7 @@ def process_request(req: ClipRequest, cfg: dict, streamers: list[dict], work: Pa
     preset = match_streamer(streamers, req.credit or "", info.get("channel", ""),
                             info.get("channel_id", ""), info.get("handle", ""))
     credit = req.credit or preset.get("credit") or info.get("handle") or ""
+    cfg = campaign.tuned(cfg, preset)   # ex. clips de 20 à 60 s pour une campagne
     n = max(1, req.count or int(cfg["detection"]["clips_per_video"]))
     cands = acquire(req, info, cfg, work)
     log(f"{len(cands)} passage(s) candidat(s).")
@@ -425,7 +428,8 @@ def process_request(req: ClipRequest, cfg: dict, streamers: list[dict], work: Pa
         out = outdir / name
         facts = render(plan, out, cfg, work / f"render{k}")
         check = qc.verify(out, facts=facts, risks=plan.risks, cfg=cfg, rights_ok=bool(preset),
-                          allow={"spoiler"} if preset.get("story_ok") else set())
+                          allow={"spoiler"} if preset.get("story_ok") else set(),
+                          block={str(r) for r in preset.get("strict_risks") or []})
         log(f"{'GO' if check['go'] else 'NO-GO'} : {name} ({check['duration']:.1f} s, "
             f"{check['size_mb']:.1f} Mo) {check['problems'] or ''}")
         meta = {"ai_score": plan.ai_score, "what": plan.what, "streamer": req.meta.get("streamer") or credit.lstrip("@"),
@@ -434,7 +438,8 @@ def process_request(req: ClipRequest, cfg: dict, streamers: list[dict], work: Pa
                 "layout": facts.get("layout")}
         if campaign.of(preset):
             # Légende complète à coller (titre, crédit exigé, hashtags) et règles de la campagne.
-            meta.update(campaign=campaign.card(preset), caption=f"{plan.title}\n\n{plan.description}")
+            meta.update(campaign=campaign.card(preset),
+                        caption=campaign.caption(preset, plan.title, plan.description))
         results.append(Result(
             path=out, title=plan.title, description=plan.description, tags=plan.tags,
             hook=plan.hook, go=check["go"], problems=check["problems"], notes=check["notes"],

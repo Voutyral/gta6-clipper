@@ -65,7 +65,7 @@ def test_campaign_stops_after_its_deadline():
 def test_request_for_dom_is_in_english_with_his_credit():
     cfg = load_config()
     req = hunt.to_request(kick(1, datetime(2026, 11, 19, 14, 0, tzinfo=UTC)), DOM, cfg)
-    assert req.langs == ["en"] and req.lang == "en" and req.credit == "kick.com/dasgasd3m"
+    assert req.langs == ["en"] and req.lang == "en" and req.credit == "dasgasd3m on Kick"
 
 
 def test_story_moment_gets_a_spoiler_warning_and_the_required_caption():
@@ -91,8 +91,8 @@ def test_ordinary_campaign_clip_keeps_the_ai_hook():
     plan = build_plan(Candidate(Path("a.mp4"), 0.0, 30.0, 10.0, 5.0, 0.0), ev, [10.0],
                       ClipRequest(url="https://kick.com/dasgasd3m/clips/k2"), {"title": "x"}, cfg, DOM,
                       "kick.com/dasgasd3m", 0)
-    assert plan.hook == "DOM FINDS A GTA 6 GLITCH" and "noteaser" not in plan.flags
-    assert "nomusic" in plan.flags and "SPOILER" not in plan.title
+    assert plan.hook == "DOM FINDS A GTA 6 GLITCH" and "SPOILER" not in plan.title
+    assert {"nomusic", "nosfx", "noteaser"} <= plan.flags      # ni musique, ni bruitage, ni aperçu (brief)
 
 
 def test_brief_reaches_the_ai():
@@ -156,3 +156,22 @@ def test_gallery_lists_running_campaigns_as_sections(tmp_path):
     assert data["clips"][0]["campaign"]["name"] == "Dom GTA 6 (RUCKUS)"
     over = dict(DOM, campaign=dict(campaign.of(DOM), closes="2026-11-01T00:00:00Z"))
     assert gallery.active_campaigns([over, {"name": "Bob"}]) == []          # terminée : plus de section
+
+
+def test_dom_brief_disclosure_length_and_refused_music(tmp_path):
+    import subprocess
+
+    from clipper import verify
+    assert campaign.caption(DOM, "Dasgas Dom fails a mission", "D") == "Paid partnership · Dasgas Dom fails a mission\n\nD"
+    cfg = load_config()
+    tuned = campaign.tuned(cfg, DOM)
+    assert (tuned["detection"]["clip_min_s"], tuned["detection"]["clip_max_s"]) == (20, 60)
+    assert cfg["detection"]["clip_min_s"] == 15                      # réglage général inchangé
+    clip = tmp_path / "c.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=black:s=1080x1920:d=6",
+                    "-f", "lavfi", "-i", "sine=f=300:d=6", "-shortest", "-pix_fmt", "yuv420p", str(clip)], check=True)
+    ok = verify.verify(clip, facts={"captions": 3}, risks=["musique"], cfg=cfg, rights_ok=True)
+    assert ok["go"]                                                   # ailleurs : simple remarque
+    refused = verify.verify(clip, facts={"captions": 3}, risks=["musique"], cfg=cfg, rights_ok=True,
+                            block=set(DOM["strict_risks"]))
+    assert not refused["go"] and "refusé par la campagne" in refused["problems"][0]

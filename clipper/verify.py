@@ -42,10 +42,12 @@ def first_frame_luma(path: str | Path) -> float | None:
 
 
 def verify(path: str | Path, *, facts: dict, risks: list[str], cfg: dict,
-           rights_ok: bool, allow: set[str] | frozenset[str] = frozenset()) -> dict:
+           rights_ok: bool, allow: set[str] | frozenset[str] = frozenset(),
+           block: set[str] | frozenset[str] = frozenset()) -> dict:
     """Retourne {"go": bool, "problems": [...], "notes": [...], "duration", "size_mb"}.
 
     `allow` : risques qu'une campagne demande expressément (ex. moments d'histoire), notés sans bloquer.
+    `block` : risques qu'une campagne refuse (ex. chanson sous licence), qui bloquent le clip.
     """
     problems: list[str] = []
     notes: list[str] = []
@@ -77,6 +79,8 @@ def verify(path: str | Path, *, facts: dict, risks: list[str], cfg: dict,
     for r in risks or []:
         if r in allow:
             notes.append(ALLOWED_NOTES.get(r, f"risque « {r} » permis par la campagne"))
+        elif r in block:
+            problems.append(RISK_LABELS.get(r) or RISK_NOTES.get(r, r) + " (refusé par la campagne)")
         elif r in RISK_LABELS:
             problems.append(RISK_LABELS[r])
         elif r in RISK_NOTES:
