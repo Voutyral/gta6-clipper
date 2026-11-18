@@ -1,7 +1,6 @@
 """Enchaînement complet : demande → source → moments forts → montage → contrôle → livraison."""
 from __future__ import annotations
 
-import html
 import shutil
 import traceback
 from dataclasses import dataclass, field
@@ -50,7 +49,6 @@ class Result:
     paid: bool = False
     lang: str = "fr"
     link: str = ""
-    telegram: bool = False
     yt: dict = field(default_factory=dict)
 
 
@@ -281,9 +279,6 @@ def deliver_result(res: Result, cfg: dict) -> None:
                                     tags=res.tags, cfg=cfg, lang=res.lang, paid=res.paid)
         else:
             res.yt = {"error": "non envoyé, le contrôle a rendu NO-GO"}
-    if d.get("telegram", True) and deliver.telegram_ready():
-        res.telegram = deliver.send_video(res.path, deliver.telegram_caption(res), res.duration)
-        deliver.send_text(deliver.telegram_details(res))
 
 
 def run_requests(reqs: list[ClipRequest], cfg: dict, streamers: list[dict], base: Path,
@@ -315,13 +310,10 @@ def run_text(text: str, cfg: dict, streamers: list[dict], base: Path, outdir: Pa
         msg = f"Aucun lien trouvé dans la demande. Exemple : `{EXAMPLE}`"
         deliver.issue_comment(msg)
         deliver.step_summary(msg)
-        deliver.send_text(html.escape(msg))
         return 1
     results, errors = run_requests(reqs, cfg, streamers, base, outdir)
     report = deliver.markdown_report(results, errors)
     deliver.issue_comment(report)
     deliver.step_summary(report)
-    for url, message, hint in errors:
-        deliver.send_text(f"❌ {html.escape(url)}\n{html.escape(message)}\n{html.escape(hint)}")
     deliver.cleanup_releases(int(cfg["delivery"].get("keep_days", 7)))
     return 0 if results else 1

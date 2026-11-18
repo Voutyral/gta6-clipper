@@ -6,7 +6,6 @@ Les fiches sont rangées dans knowledge/ : c'est la matière première des skill
 """
 from __future__ import annotations
 
-import html
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -92,6 +91,5 @@ def run_learn(text: str, cfg: dict, base: Path) -> int:
         body = f"### 📘 Fiche enregistrée : `knowledge/{path.name}`\n\n" + header + md.strip()
         deliver.issue_comment(body[:60000])
         deliver.step_summary(body[:60000])
-        deliver.send_text(f"📘 <b>{html.escape(title)}</b>\n\n{html.escape(md.strip()[:3300])}")
         done += 1
     return 0 if done else 1

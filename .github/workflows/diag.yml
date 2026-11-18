@@ -1,7 +1,7 @@
 name: Diagnostic
 
 # Bilan de santé en un bouton : Actions > Diagnostic > Run workflow.
-# Vérifie Telegram, les clés d'IA, l'envoi YouTube et, si tu en donnes, des liens.
+# Vérifie les clés d'IA, l'envoi YouTube et, si tu en donnes, des liens.
 on:
   workflow_dispatch:
     inputs:
@@ -22,8 +22,6 @@ jobs:
       REQUEST_TEXT: ${{ github.event.inputs.links }}
       GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       YTDLP_PROXY: ${{ secrets.YTDLP_PROXY }}

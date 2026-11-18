@@ -261,7 +261,7 @@ def _render(plan: Plan, out: Path, cfg: dict, workdir: Path, flags: set) -> dict
         last_a = "mix"
     fc.append(f"[{last_a}]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[a]")
 
-    # Débit plafonné pour rester sous les 50 Mo acceptés par un bot Telegram.
+    # Débit plafonné : le fichier reste sous 50 Mo, léger à télécharger au téléphone.
     kbps = max(2500, min(9000, int(46 * 8192 / max(total, 1.0)) - 180))
     cmd += ["-filter_complex", ";".join(fc), "-map", "[v]", "-map", "[a]", "-t", f"{total:.3f}",
             "-c:v", "libx264", "-preset", str(ed.get("x264_preset", "veryfast")), "-crf", "20",

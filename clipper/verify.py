@@ -55,7 +55,7 @@ def verify(path: str | Path, *, facts: dict, risks: list[str], cfg: dict,
         problems.append("pas de piste audio")
     size_mb = info["size"] / 1e6
     if size_mb > 49.5:
-        problems.append(f"{size_mb:.0f} Mo : trop lourd pour un envoi Telegram")
+        problems.append(f"{size_mb:.0f} Mo : trop lourd, réduis la durée")
     vol = mean_volume(path)
     if vol is not None and vol < -45:
         problems.append("son quasi muet")

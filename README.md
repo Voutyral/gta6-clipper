@@ -8,26 +8,22 @@ Le calcul se fait sur les serveurs gratuits de GitHub : aucun ordinateur à lais
 1. Tu ouvres une issue GitHub dont le titre contient le lien (app GitHub, 10 secondes).
 2. GitHub ne télécharge que le passage utile, repère les moments forts et monte le clip.
 3. Un contrôle GO / NO-GO ouvre le fichier fini et vérifie format, son, poids et risques.
-4. Tu reçois la vidéo sur Telegram, avec titre et description à copier d'un appui, plus un lien de téléchargement dans l'issue.
+4. Le programme répond dans l'issue : lien de téléchargement, titre et description à copier. L'app GitHub t'envoie une notification.
 5. Tu publies sur YouTube, TikTok et Instagram. L'envoi automatique sur YouTube existe en option.
 
-## Mise en route (5 minutes, tout au téléphone)
+## Mise en route (3 minutes, tout au téléphone)
 
-### 1. Telegram, pour recevoir les clips
+### 1. Clé Gemini gratuite, pour que l'IA regarde vraiment la vidéo (recommandé)
 
-1. Dans Telegram, ouvre `@BotFather`, envoie `/newbot`, choisis un nom puis un identifiant qui finit par `bot`.
-2. Copie le jeton qu'il te donne.
-3. Ouvre ton nouveau bot et appuie sur **Démarrer**.
-4. Sur github.com dans ton navigateur (pas l'app) : ton dépôt, **Settings**, **Secrets and variables**, **Actions**, **New repository secret**. Nom `TELEGRAM_BOT_TOKEN`, valeur : le jeton.
+1. Sur `aistudio.google.com/apikey`, copie une clé existante ou crée-en une. Aucune carte bancaire : n'active jamais la facturation.
+2. Ouvre `github.com/Voutyral/gta6-clipper/settings/secrets/actions/new` dans le navigateur.
+3. **Name** : `GEMINI_API_KEY`. **Secret** : colle la clé. Puis **Add secret**.
 
-Sans Telegram, tout marche quand même : le clip arrive par le lien de téléchargement posté dans l'issue.
+Avec cette clé, Gemini voit l'image et entend le son de chaque passage : il choisit le meilleur, resserre la coupe, écrit accroche et titre, et signale cinématiques, spoilers et violence en ouverture. Sans elle, le programme applique des règles simples : moments forts repérés au son, accroche tirée d'une liste. L'IA gratuite de GitHub ne répondait pas sur ce dépôt lors des essais ; le programme la réessaie à chaque lancement et s'en passe si elle reste fermée.
 
-### 2. Clé Gemini gratuite, pour que l'IA regarde vraiment la vidéo (recommandé)
+### 2. Notifications
 
-1. Va sur `aistudio.google.com`, **Get API key**, **Create API key**.
-2. Ajoute-la en secret GitHub sous le nom `GEMINI_API_KEY`.
-
-Avec cette clé, Gemini voit l'image et entend le son de chaque passage : il choisit le meilleur, resserre la coupe, écrit accroche et titre, et signale cinématiques, spoilers et violence en ouverture. Sans elle, le programme applique des règles simples : moments forts repérés au son, accroche tirée d'une liste. L'IA gratuite de GitHub ne répondait pas sur ce dépôt lors des essais (même l'outil officiel de GitHub échouait) ; le programme la réessaie à chaque lancement et s'en passe si elle reste fermée.
+Dans l'app GitHub, active les notifications. Chaque clip fini arrive comme un commentaire sur ta demande.
 
 ### 3. Premier essai
 
@@ -73,7 +69,7 @@ Avec la clé Gemini, un lien YouTube public est lu directement chez Google (imag
 
 `streamers.yaml` liste les streamers que tu as le droit de clipper : campagne rejointe ou accord écrit. Pour chacun : crédit, position de sa caméra, campagne rémunérée ou non.
 
-Avec `auto: true`, le radar récupère chaque matin ses clips Twitch les plus vus des dernières 24 heures, les monte et te les envoie. Un clip d'une source absente de la liste est monté quand même, mais marqué « accord à vérifier ».
+Avec `auto: true`, le radar récupère chaque matin ses clips Twitch les plus vus des dernières 24 heures, les monte et ouvre une issue « Radar du jour » avec les liens. Un clip d'une source absente de la liste est monté quand même, mais marqué « accord à vérifier ».
 
 ## Options avancées
 
@@ -112,14 +108,13 @@ Vérifié en conditions réelles : lecture des demandes, repérage des moments f
 
 Vérifié ensuite sur GitHub, le 16 novembre 2026, avec une vidéo libre de droits : installation, téléchargement, sous-titres Whisper, montage, contrôle et lien de téléchargement.
 
-Reste à valider avec tes clés et tes liens : Telegram, Gemini, l'envoi YouTube, et les sites eux-mêmes (Twitch, Kick). Chaque échec est écrit en clair dans l'issue avec la marche à suivre.
+Reste à valider avec tes clés et tes liens : Gemini, l'envoi YouTube, et les sites eux-mêmes (Twitch, Kick). Chaque échec est écrit en clair dans l'issue avec la marche à suivre.
 
 ## Dépannage
 
-* **Tout vérifier d'un coup** : onglet **Actions**, **Diagnostic**, **Run workflow**. Le bilan dit si Telegram, Gemini et l'envoi YouTube répondent, et teste les liens que tu lui donnes.
+* **Tout vérifier d'un coup** : onglet **Actions**, **Diagnostic**, **Run workflow**. Le bilan dit si Gemini et l'envoi YouTube répondent, et teste les liens que tu lui donnes.
 
 * **Rien ne se passe** : l'issue doit être ouverte par le propriétaire du dépôt. Regarde l'onglet **Actions**.
-* **Pas de message Telegram** : appuie sur **Démarrer** dans ton bot, puis relance. Le programme retient ta discussion au premier passage.
 * **Pas de sous-titres** : aucune parole détectée, ou modèle Whisper indisponible. Le clip sort quand même.
 * **Quota** : GitHub offre 2 000 minutes par mois aux dépôts privés, soit environ 300 clips.
 

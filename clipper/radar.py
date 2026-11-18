@@ -87,6 +87,10 @@ def run_radar(cfg: dict, streamers: list[dict], base: Path, outdir: Path, dry_ru
         if url not in failed:
             seen[str(e["id"])] = today
     _save_seen(seen)
-    deliver.step_summary("## Radar du jour\n\n" + deliver.markdown_report(results, errors))
+    report = deliver.markdown_report(results, errors)
+    deliver.step_summary("## Radar du jour\n\n" + report)
+    if results or errors:
+        day = datetime.now(timezone.utc).strftime("%d/%m")
+        deliver.open_issue(f"Radar du {day} : {len(results)} clip(s)", report)
     deliver.cleanup_releases(int(cfg["delivery"].get("keep_days", 7)))
     return 0

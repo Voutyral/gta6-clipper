@@ -4,35 +4,14 @@
 """
 from __future__ import annotations
 
-import html
 import os
 import shutil
 import subprocess
 
-import requests
 
 from . import ai, deliver, fetch, youtube
 from .request import URL_RE
 from .util import fmt_ts, log
-
-
-def _telegram() -> str:
-    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-    if not token:
-        return "⚪ Telegram : pas de jeton (secret `TELEGRAM_BOT_TOKEN`)"
-    try:
-        r = requests.get(f"https://api.telegram.org/bot{token}/getMe", timeout=30).json()
-    except Exception as exc:
-        return f"❌ Telegram : injoignable ({type(exc).__name__})"
-    if not r.get("ok"):
-        return f"❌ Telegram : jeton refusé ({r.get('description')})"
-    name = r["result"].get("username")
-    if not deliver.telegram_chat_id():
-        return (f"🟡 Telegram : bot @{name} reconnu, mais il ne sait pas encore à qui écrire. "
-                "Ouvre le bot, appuie sur Démarrer, puis relance ce diagnostic.")
-    if deliver.send_text("✅ Le clippeur est relié à ce bot. Tes clips arriveront ici."):
-        return f"✅ Telegram : bot @{name}, message d'essai envoyé"
-    return f"❌ Telegram : bot @{name} reconnu, mais l'envoi du message d'essai a échoué"
 
 
 def _ais(cfg: dict) -> list[str]:
@@ -108,12 +87,11 @@ def _link(url: str) -> list[str]:
 
 
 def run_doctor(text: str, cfg: dict) -> int:
-    lines = ["## Bilan de santé du clippeur", "", _telegram()] + _ais(cfg) + [_youtube(), _tools()]
+    lines = ["## Bilan de santé du clippeur", ""] + _ais(cfg) + [_youtube(), _tools()]
     for url in [u.rstrip(".,;:!?") for u in URL_RE.findall(text or "")][:5]:
         lines.extend(_link(url))
     report = "\n".join(lines)
     log(report)
     deliver.step_summary(report.replace("\n", "  \n"))
     deliver.issue_comment(report.replace("\n", "  \n"))
-    deliver.send_text(html.escape(report.replace("## ", "").replace("`", "")))
     return 0

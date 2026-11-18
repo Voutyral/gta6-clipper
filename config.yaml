@@ -56,7 +56,6 @@ ai:
   claude_model: claude-haiku-5-5
 
 delivery:
-  telegram: true
   release: true                     # lien de téléchargement sur GitHub
   keep_days: 7                      # les clips plus vieux sont supprimés de GitHub
 

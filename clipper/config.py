@@ -58,7 +58,7 @@ DEFAULTS: dict = {
                           "openai/gpt-4o"],
         "claude_model": "claude-haiku-5-5",
     },
-    "delivery": {"telegram": True, "release": True, "keep_days": 7},
+    "delivery": {"release": True, "keep_days": 7},
     "youtube": {"mode": "off", "category_id": "20"},
     "radar": {
         "enabled": True,
