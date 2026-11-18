@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import traceback
@@ -417,6 +418,9 @@ def run_requests(reqs: list[ClipRequest], cfg: dict, streamers: list[dict], base
 def run_text(text: str, cfg: dict, streamers: list[dict], base: Path, outdir: Path) -> int:
     """Point d'entrée du workflow : texte libre d'une issue ou d'un lancement manuel."""
     reqs = parse_requests(text)
+    if not reqs and os.environ.get("GITHUB_EVENT_NAME") == "issue_comment":
+        log("Commentaire sans lien vidéo : rien à faire.")   # simple discussion dans une issue
+        return 0
     if not reqs:
         msg = f"Aucun lien trouvé dans la demande. Exemple : `{EXAMPLE}`"
         deliver.issue_comment(msg)

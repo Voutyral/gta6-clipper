@@ -59,8 +59,16 @@ def made_today(seen: dict, streamer: str) -> int:
 # ---------------------------------------------------------------- Tri
 
 def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
-         now: datetime | None = None) -> list[tuple[float, Found, dict, str]]:
-    """Clips retenus, du plus prometteur au moins prometteur : (score, clip, fiche streamer, motif)."""
+         now: datetime | None = None, stats: dict | None = None) -> list[tuple[float, Found, dict, str]]:
+    """Clips retenus, du plus prometteur au moins prometteur : (score, clip, fiche streamer, motif).
+
+    `stats`, si fourni, compte les clips écartés par motif (affiché dans le journal de la chasse).
+    """
+    stats = {} if stats is None else stats
+
+    def drop(reason: str) -> None:
+        stats[reason] = stats.get(reason, 0) + 1
+
     hc = cfg["hunt"]
     now = now or datetime.now(timezone.utc)
     blocked = {str(b).lower().lstrip("@") for b in hc.get("blocked_streamers") or []}
@@ -69,18 +77,27 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
     out = []
     for f in found:
         preset = match_streamer(streamers, f.streamer, f.streamer_name)
-        if f.key in seen or f.streamer.lower() in blocked:
+        if f.key in seen:
+            drop("déjà vus")
+            continue
+        if f.streamer.lower() in blocked:
+            drop("streamer bloqué")
             continue
         if not float(hc.get("min_duration_s", 8)) <= f.duration <= float(hc.get("max_duration_s", 120)):
+            drop("durée hors limites")
             continue
         if hc.get("allowlist_only") and not preset:
+            drop("hors streamers.yaml")
             continue
         if f.views < int(preset.get("min_views", hc.get("min_views", 150))):
+            drop("pas assez de vues")
             continue
         if f.age_hours(now) > float(hc.get("max_age_hours", 30)):
+            drop("trop anciens")
             continue
         title = f.title.lower()
         if any(w in title for w in excluded):
+            drop("mot exclu dans le titre")
             continue
         # Vues par heure, avec un amortissement pour ne pas surestimer les clips de dix minutes.
         score = f.views / (f.age_hours(now) + 2.0) ** 0.8
@@ -91,6 +108,7 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
         elif wanted_langs and not f.language:
             why += ", langue à vérifier"   # Kick : vérifiée seulement après téléchargement
         elif wanted_langs and f.language not in wanted_langs:
+            drop("autre langue")
             continue
         out.append((score, f, preset, why))
     # Langue connue d'abord : un clip dont la langue reste à vérifier ne passe qu'en dernier.
@@ -101,9 +119,11 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
     for item in out:
         s = item[1].streamer.lower()
         if count.get(s, 0) + made_today(seen, s) >= cap:
+            drop("quota du streamer atteint")
             continue
         if "langue à vérifier" in item[3]:
             if unknown >= unknown_cap:
+                drop("langue inconnue (Kick), un seul essai par chasse")
                 continue
             unknown += 1
         count[s] = count.get(s, 0) + 1
@@ -135,12 +155,15 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
         return 0
     seen = load_seen()
     found, source_errors = discover(cfg, streamers)
-    ranked = rank(found, cfg, streamers, seen)
+    stats: dict = {}
+    ranked = rank(found, cfg, streamers, seen, stats=stats)
     log(f"Chasse : {len(found)} clip(s) trouvés, {len(ranked)} retenus après tri.")
+    if stats:
+        log("Écartés : " + describe_stats(stats))
     for score, f, _, why in ranked[:12]:
         log(f"  {score:8.1f}  {f.platform:6s} @{f.streamer:<18s} {why} · {f.title[:60]}")
     if dry_run:
-        deliver.step_summary(_dry_report(ranked, source_errors))
+        deliver.step_summary(_dry_report(ranked, source_errors, stats))
         return 0
 
     want = max_clips or int(hc.get("max_per_run", 3))
@@ -203,8 +226,14 @@ def hunt_report(results: list[Result], skipped: list[str], errors: list, source_
     return "\n".join(lines)
 
 
-def _dry_report(ranked, source_errors) -> str:
+def describe_stats(stats: dict) -> str:
+    return ", ".join(f"{n} {why}" for why, n in sorted(stats.items(), key=lambda kv: -kv[1]))
+
+
+def _dry_report(ranked, source_errors, stats: dict | None = None) -> str:
     lines = ["## Chasse à blanc : ce qui serait monté", ""]
+    if stats:
+        lines += ["Écartés : " + describe_stats(stats), ""]
     for score, f, _, why in ranked[:15]:
         lines.append(f"- **{score:.0f}** · {f.platform} · @{f.streamer} · {why} · [{f.title[:70] or 'sans titre'}]({f.url})")
     if source_errors:

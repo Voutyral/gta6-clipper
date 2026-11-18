@@ -67,8 +67,18 @@ def url_time(url: str) -> float | None:
     return float(total) if total else None
 
 
+# Liens qui ne sont jamais des vidéos à clipper (signature d'un outil, lien vers le dépôt…).
+NOT_VIDEO_HOSTS = ("claude.ai", "claude.com", "anthropic.com", "github.com", "githubusercontent.com", "github.io")
+
+
+def is_video_link(url: str) -> bool:
+    host = re.sub(r"^https?://", "", url, flags=re.I).split("/", 1)[0].split(":", 1)[0].lower()
+    return not any(host == h or host.endswith("." + h) for h in NOT_VIDEO_HOSTS)
+
+
 def _parse_block(text: str) -> list[ClipRequest]:
     urls = [u.rstrip(".,;:!?") for u in URL_RE.findall(text)]
+    urls = [u for u in urls if is_video_link(u)]
     if not urls:
         return []
     rest = URL_RE.sub(" ", text)
@@ -108,7 +118,7 @@ def _parse_block(text: str) -> list[ClipRequest]:
 def parse_requests(text: str) -> list[ClipRequest]:
     """Une demande par lien. Un seul lien : tout le texte lui sert d'options."""
     text = (text or "").replace("\r", "")
-    if len(URL_RE.findall(text)) <= 1:
+    if len([u for u in URL_RE.findall(text) if is_video_link(u)]) <= 1:
         return _parse_block(text)
     out: list[ClipRequest] = []
     for line in text.split("\n"):
