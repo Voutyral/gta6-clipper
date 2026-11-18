@@ -599,13 +599,12 @@
       return;
     }
     let i = 0;
-    const next = nextRun(data.schedule_utc);
     for (const s of secs) {
       if (!s.camp && !s.items.length) continue;   // « Autres clips » vide : rien à montrer
       list.append(sectionHead(s));
-      if (!s.items.length) {
+      if (!s.items.length) {   // section de campagne vide : c'est la veille des lives qui lance la chasse
         list.append(el("div", { class: "sec-empty" }, view === "done" ? "Rien de posté ici."
-          : "Pas encore de clip" + (next ? `, prochaine chasse vers ${next}.` : ".")));
+          : "Pas encore de clip. La chasse part dès le début du live, puis toutes les heures."));
         continue;
       }
       const grid = el("div", { class: "grid" });

@@ -1,11 +1,15 @@
 """Veille des lives : la chasse de campagne démarre quand le streamer lance son live.
 
-Toutes les 15 minutes (workflow « Veille des lives »), un contrôle léger regarde si les
-streamers en campagne sont en direct. Il déclenche une chasse :
+Un contrôle léger (workflow « Veille des lives ») regarde si les streamers en campagne sont
+en direct. Il déclenche une chasse :
   - dès le début du live ;
   - puis toutes les heures tant qu'il dure ;
   - puis toutes les heures pendant 6 heures après la fin (clips tardifs et rediffusion,
-    dont l'outil tire lui-même ses clips).
+    dont l'outil tire lui-même ses clips) ;
+  - et, filet de sécurité, au moins toutes les 2 heures tant que la fenêtre du stream est
+    ouverte, même si le live n'est pas vu (statut illisible).
+GitHub lance les tâches programmées de ce dépôt avec 8 à 14 heures de retard : autour du stream
+d'une campagne, la veille tourne donc d'un seul tenant et se relance elle-même (keep_watching).
 L'état (en live ou non, dernière chasse) est gardé dans state/live.json.
 """
 from __future__ import annotations
@@ -21,6 +25,9 @@ from .util import log
 STATE = ROOT / "state" / "live.json"
 EVERY = timedelta(minutes=55)        # une chasse par heure pendant le live (marge pour le retard de GitHub)
 AFTER = timedelta(hours=6)           # et encore pendant 6 heures après la fin
+SAFETY = timedelta(minutes=115)      # filet de sécurité : une chasse toutes les 2 h pendant la fenêtre du stream
+BEFORE = timedelta(hours=24)         # veille continue dès 24 h avant la fenêtre de tournage
+LATE = timedelta(hours=18)           # et au plus tard 18 h après sa fin
 
 
 def kick_live(slug: str) -> bool:
@@ -75,10 +82,39 @@ def watched(streamers: list[dict], now: datetime) -> list[dict]:
         lo, hi = campaign.window(camp)
         if lo and now < lo - timedelta(hours=2):
             continue
-        if hi and now > hi + timedelta(hours=18):   # le live du jour autorisé est fini depuis longtemps
+        if hi and now > hi + LATE:   # le live du jour autorisé est fini depuis longtemps
             continue
         out.append(s)
     return out
+
+
+def keep_watching(streamers: list[dict], state: dict, now: datetime) -> bool:
+    """Veiller d'un seul tenant, et relancer la veille à la fin de ce passage ?
+
+    Oui autour du stream d'une campagne datée : de 24 heures avant la fenêtre de tournage
+    jusqu'à 6 heures après la fin du live (18 heures après la fenêtre au plus tard).
+    """
+    for s in streamers:
+        camp = campaign.of(s)
+        if not camp or campaign.ended(camp, now):
+            continue
+        lo, hi = campaign.window(camp)
+        if not (lo and hi):
+            continue          # chaîne suivie sans date de stream : la veille programmée suffit
+        if now < lo - BEFORE or now > hi + LATE:
+            continue
+        st = state.get(s.get("name")) or {}
+        done = _dt(st.get("ended"))
+        if now > hi and not st.get("live") and done and now - done > AFTER:
+            continue          # live terminé, chasses d'après-live faites
+        return True
+    return False
+
+
+def _open(window, now: datetime) -> bool:
+    """Fenêtre de tournage datée (début et fin) et ouverte en ce moment."""
+    lo, hi = window or (None, None)
+    return bool(lo and hi) and lo <= now <= hi
 
 
 def _dt(text) -> datetime | None:
@@ -88,15 +124,18 @@ def _dt(text) -> datetime | None:
         return None
 
 
-def decide(statuses: dict[str, bool | None], state: dict, now: datetime) -> tuple[list[tuple[str, str]], dict]:
-    """Qui déclenche une chasse maintenant, et pourquoi. Retourne (déclenchements, nouvel état)."""
+def decide(statuses: dict[str, bool | None], state: dict, now: datetime,
+           windows: dict | None = None) -> tuple[list[tuple[str, str]], dict]:
+    """Qui déclenche une chasse maintenant, et pourquoi. Retourne (déclenchements, nouvel état).
+
+    `windows` : fenêtre de tournage (début, fin) de chaque campagne. Tant qu'elle est ouverte,
+    une chasse part au moins toutes les 2 heures, même si le live n'est pas vu.
+    """
+    windows = windows or {}
     triggers: list[tuple[str, str]] = []
     new = dict(state)
     for name, live in statuses.items():
         st = dict(state.get(name) or {})
-        if live is None:          # statut inconnu : on ne touche à rien
-            new[name] = st
-            continue
         last, ended = _dt(st.get("last")), _dt(st.get("ended"))
         due = last is None or now - last >= EVERY
         reason = ""
@@ -107,12 +146,15 @@ def decide(statuses: dict[str, bool | None], state: dict, now: datetime) -> tupl
                 reason = "chasse de l'heure pendant le live"
             st["live"] = True
             st.pop("ended", None)
-        else:
+        elif live is False:
             if st.get("live"):
                 reason, st["ended"] = "fin du live", now.isoformat(timespec="seconds")
             elif ended and now - ended <= AFTER and due:
                 reason = "après le live : clips tardifs et rediffusion"
             st["live"] = False
+        # live None : statut inconnu, l'état du live ne change pas.
+        if not reason and _open(windows.get(name), now) and (last is None or now - last >= SAFETY):
+            reason = "filet de sécurité, fenêtre du stream ouverte" + (", statut illisible" if live is None else "")
         if reason:
             st["last"] = now.isoformat(timespec="seconds")
             triggers.append((name, reason))
@@ -128,23 +170,35 @@ def load_state() -> dict:
 
 
 def run_watch(streamers: list[dict], now: datetime | None = None) -> int:
+    """Un contrôle. Sorties : run (lancer la chasse), watching (campagne surveillée en ce moment),
+    keep (veiller d'un seul tenant et relancer la veille)."""
     now = now or datetime.now(timezone.utc)
+    state = load_state()
     targets = watched(streamers, now)
     if not targets:
         log("Veille : aucune campagne à surveiller en ce moment.")
         _output("run", "false")
+        _output("watching", "false")
+        _output("keep", _yes(keep_watching(streamers, state, now)))
         return 0
     statuses = {s["name"]: status(s) for s in targets}
     for name, live in statuses.items():
         log(f"Veille : {name} {'EN LIVE' if live else 'hors ligne' if live is False else 'statut inconnu'}")
-    triggers, state = decide(statuses, load_state(), now)
+    windows = {s["name"]: campaign.window(campaign.of(s)) for s in targets}
+    triggers, state = decide(statuses, state, now, windows)
     STATE.parent.mkdir(exist_ok=True)
     STATE.write_text(json.dumps(state, indent=1, ensure_ascii=False))
     for name, why in triggers:
         log(f"Veille : chasse lancée pour {name} ({why})")
-    _output("run", "true" if triggers else "false")
+    _output("run", _yes(triggers))
+    _output("watching", "true")
+    _output("keep", _yes(keep_watching(streamers, state, now)))
     _summary(statuses, triggers)
     return 0
+
+
+def _yes(value) -> str:
+    return "true" if value else "false"
 
 
 def _output(key: str, value: str) -> None:

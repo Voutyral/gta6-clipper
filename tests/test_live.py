@@ -118,3 +118,49 @@ def test_campaign_clip_ends_with_its_call_to_action():
     assert tags[:3] == ["#ad", "#exemplechaine", "#gta6"] and len(tags) == 6
     assert campaign.hashtags(YT, "seed") == tags                         # même clip, mêmes hashtags
     assert {tuple(campaign.hashtags(YT, str(i))) for i in range(10)} != {tuple(tags)}   # ils varient
+
+
+def test_safety_net_hunts_every_two_hours_while_the_stream_window_is_open():
+    lo, hi = campaign.window(campaign.of(DOM))
+    win = {"Dasgas Dom": (lo, hi)}
+    trig, state = live.decide({"Dasgas Dom": None}, {}, lo - timedelta(hours=1), win)
+    assert trig == []                                                   # fenêtre pas encore ouverte
+    trig, state = live.decide({"Dasgas Dom": None}, state, lo + timedelta(minutes=10), win)
+    assert trig == [("Dasgas Dom", "filet de sécurité, fenêtre du stream ouverte, statut illisible")]
+    assert "live" not in state["Dasgas Dom"]                            # statut inconnu : l'état du live ne bouge pas
+    trig, state = live.decide({"Dasgas Dom": False}, state, lo + timedelta(minutes=70), win)
+    assert trig == []                                                   # moins de 2 heures après
+    trig, state = live.decide({"Dasgas Dom": False}, state, lo + timedelta(minutes=130), win)
+    assert trig == [("Dasgas Dom", "filet de sécurité, fenêtre du stream ouverte")]
+    trig, state = live.decide({"Dasgas Dom": True}, state, lo + timedelta(minutes=140), win)
+    assert trig == [("Dasgas Dom", "début du live")]                    # le live passe avant le filet
+    trig, _ = live.decide({"Dasgas Dom": None}, {}, hi + timedelta(hours=1), win)
+    assert trig == []                                                   # fenêtre fermée
+
+
+def test_watch_runs_continuously_around_the_campaign_stream():
+    lo, hi = campaign.window(campaign.of(DOM))
+    keep = lambda now, state=None: live.keep_watching(STREAMERS, state or {}, now)
+    assert not keep(lo - timedelta(hours=30))                           # trop tôt
+    assert keep(lo - timedelta(hours=15))                               # la veille du stream
+    assert keep(lo + timedelta(hours=3)) and keep(hi + timedelta(hours=2))
+    ended = {"Dasgas Dom": {"live": False, "ended": (hi - timedelta(hours=1)).isoformat()}}
+    assert keep(hi + timedelta(hours=4), ended)                         # chasses d'après-live en cours
+    assert not keep(hi + timedelta(hours=6), ended)                     # tout est fait
+    assert not keep(hi + timedelta(hours=19))                           # trop tard dans tous les cas
+    assert not live.keep_watching([YT], {}, lo)                         # sans fin de fenêtre : veille programmée
+
+
+def test_watch_outputs_tell_the_workflow_what_to_do(monkeypatch, tmp_path):
+    out = tmp_path / "out"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out))
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    monkeypatch.setattr(live, "STATE", tmp_path / "live.json")
+    monkeypatch.setattr(live, "status", lambda s: True)
+    lo, _ = campaign.window(campaign.of(DOM))
+    live.run_watch(STREAMERS, now=lo - timedelta(hours=10))
+    assert out.read_text().split() == ["run=false", "watching=false", "keep=true"]
+    out.unlink()
+    live.run_watch(STREAMERS, now=lo + timedelta(hours=1))
+    assert out.read_text().split() == ["run=true", "watching=true", "keep=true"]
+    assert json.loads((tmp_path / "live.json").read_text())["Dasgas Dom"]["live"] is True

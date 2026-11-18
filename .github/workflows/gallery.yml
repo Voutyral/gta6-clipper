@@ -1,10 +1,20 @@
 name: Galerie
 
-# Page web des clips prêts à poster (GitHub Pages). Appelée après chaque clip et chaque chasse.
+# Page web des clips prêts à poster (GitHub Pages). Appelée après chaque clip et chaque chasse,
+# et republiée d'elle-même quand la page, les campagnes ou les réglages de la galerie changent.
 # Si Pages n'est pas activé sur le dépôt, rien n'est publié et le reste fonctionne normalement.
 on:
   workflow_call:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "clipper/web/**"
+      - "clipper/gallery.py"
+      - "clipper/campaign.py"
+      - "streamers.yaml"
+      - "config.yaml"
+      - ".github/workflows/gallery.yml"
 
 permissions:
   contents: read

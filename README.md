@@ -37,6 +37,8 @@ La galerie est une page web hébergée par GitHub Pages. Sur un compte GitHub gr
 3. Lance **Actions**, **Galerie**, **Run workflow**. L'adresse est `https://voutyral.github.io/gta6-clipper/`.
 4. Dans Safari, **Partager**, puis **Sur l'écran d'accueil** : la galerie s'ouvre comme une app.
 
+La galerie se met à jour après chaque chasse qui monte des clips, et se republie d'elle-même quand la page, les campagnes ou ses réglages changent.
+
 Ce que « public » change : le code, les issues et les clips deviennent visibles par qui trouve l'adresse. Tes clés restent secrètes. En échange, les minutes de calcul GitHub deviennent illimitées.
 
 Sans galerie, tout marche quand même : chaque issue contient les liens de téléchargement.
@@ -94,6 +96,8 @@ Les autres clips trouvés par la chasse sont montés avec la mention « accord �
 ### Campagnes rémunérées (Content Rewards)
 
 Un bloc `campaign:` sous un streamer (exemple : Dasgas Dom) applique le brief de la campagne. La chasse ne prend que la source autorisée (stream daté, jeu demandé, même live après minuit) et la fait passer avant tout le reste, jusqu'à la date limite. Le montage suit la langue du streamer, écrit son crédit, ajoute les hashtags exigés et la mention `#ad`, coupe la musique si demandé, et met « SPOILER WARNING » sur la couverture d'un moment d'histoire sans rien dévoiler. Dans la galerie, le bouton **Légende** copie la légende complète, et la fiche rappelle les plateformes acceptées, le réglage « contenu commercial » et le délai de soumission du lien. Les jours de stream, une ligne `cron` de `chasse.yml` ajoute des passages réservés aux campagnes.
+
+**Veille des lives** (`live.yml`) : la chasse de campagne part dès que le streamer lance son live, puis toutes les heures pendant le live et pendant 6 heures après la fin (l'outil tire aussi ses propres clips de la rediffusion). Tant que la fenêtre du stream est ouverte, une chasse part au moins toutes les 2 heures, même si le live n'est pas vu. GitHub lance les tâches programmées de ce dépôt avec 8 à 14 heures de retard (problème connu des comptes récents) : autour du stream, de 24 heures avant jusqu'à 6 heures après la fin, la veille tourne donc d'un seul tenant (un contrôle toutes les 5 minutes) et se relance elle-même toutes les 5 heures. Elle démarre seule quand `streamers.yaml` change ; sinon **Actions**, **Veille des lives**, **Run workflow**.
 
 ## Français et anglais
 

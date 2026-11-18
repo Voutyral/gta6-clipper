@@ -1,26 +1,60 @@
 name: Veille des lives
 
-# Toutes les 15 minutes : un streamer en campagne (streamers.yaml) vient-il de lancer son live ?
-# Si oui, la chasse de campagne part tout de suite, puis toutes les heures pendant le live,
-# puis encore toutes les heures pendant 6 heures après la fin (clips tardifs et rediffusion,
-# où l'outil fait ses propres clips). GitHub peut retarder un lancement de quelques minutes.
+# Un streamer en campagne (streamers.yaml) est-il en live ? La chasse de campagne part dès le début
+# du live, puis toutes les heures pendant le live, puis toutes les heures pendant 6 heures après la fin
+# (clips tardifs et rediffusion, où l'outil fait ses propres clips). Pendant la fenêtre du stream,
+# une chasse part aussi au moins toutes les 2 heures, même si le live n'est pas vu.
+#
+# GitHub lance les tâches programmées de ce dépôt avec 8 à 14 heures de retard (compte récent).
+# Autour du stream d'une campagne (de 24 h avant la fenêtre à 6 h après la fin du live), la veille
+# tourne donc d'un seul tenant : un contrôle toutes les 5 minutes pendant 5 heures, puis elle se
+# relance elle-même, sans attendre l'horaire. Elle démarre aussi quand ce fichier, clipper/live.py
+# ou streamers.yaml change. En dehors de ces périodes : un seul contrôle par lancement.
 on:
   schedule:
-    - cron: "4,19,34,49 * * * *"
+    - cron: "41 * * * *"
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/live.yml"
+      - "clipper/live.py"
+      - "streamers.yaml"
 
 permissions:
   contents: write   # état de la veille (state/live.json)
-  actions: write    # lancer le workflow de chasse
-
-concurrency:
-  group: veille
-  cancel-in-progress: false
+  actions: write    # lancer la chasse, et relancer la veille
 
 jobs:
-  watch:
+  gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
+    outputs:
+      skip: ${{ steps.busy.outputs.skip }}
+    steps:
+      - name: Une veille tourne-t-elle déjà ?
+        id: busy
+        # Un lancement programmé (souvent très en retard) ne fait rien si une veille plus ancienne
+        # tourne ou attend son tour : la veille continue s'en occupe déjà.
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/live.yml/runs?per_page=20" \
+                --jq "[.workflow_runs[] | select(.id < ${{ github.run_id }} and .status != \"completed\")] | length")
+          if [ "${n:-0}" -gt 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Une veille tourne déjà : rien à faire." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  watch:
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    concurrency:
+      group: veille
+      cancel-in-progress: false
     env:
       GH_TOKEN: ${{ github.token }}
       YTDLP_PROXY: ${{ secrets.YTDLP_PROXY }}
@@ -39,22 +73,41 @@ jobs:
       - name: Outils (légers)
         run: pip install -q PyYAML requests "yt-dlp[default,curl-cffi]"
 
-      - name: Qui est en live ?
-        id: watch
-        run: python -m clipper watch
-
-      - name: Lancer la chasse de campagne
-        if: steps.watch.outputs.run == 'true'
-        run: gh workflow run chasse.yml -f campaign_only=true
-
-      - name: Enregistrer l'état
-        if: always()
+      - name: Veille
+        id: veille
         run: |
+          set +e
           git config user.name "clipper-bot"
           git config user.email "clipper-bot@users.noreply.github.com"
-          git add state/live.json 2>/dev/null || true
-          if ! git diff --cached --quiet; then
-            git commit -q -m "Veille des lives"
-            git pull -q --rebase
-            git push -q
-          fi
+          stop=$(( $(date +%s) + 300 * 60 ))   # 5 heures de veille par lancement, puis relance
+          checks=0; hunts=0; keep=""
+          while :; do
+            git pull -q --rebase --autostash   # dernière version du code et de streamers.yaml
+            out=$(mktemp); sum=$(mktemp)
+            GITHUB_OUTPUT="$out" GITHUB_STEP_SUMMARY="$sum" python -m clipper watch
+            checks=$((checks + 1))
+            if grep -qx "run=true" "$out"; then
+              gh workflow run chasse.yml -f campaign_only=true && hunts=$((hunts + 1))
+              cat "$sum" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            git add state/live.json 2>/dev/null
+            if ! git diff --cached --quiet; then
+              git commit -q -m "Veille des lives"
+              git pull -q --rebase && git push -q
+            fi
+            # Dernière réponse lisible : un contrôle qui plante ne coupe pas la veille.
+            grep -qx "keep=true" "$out" && keep=true
+            grep -qx "keep=false" "$out" && keep=false
+            [ "$keep" != false ] || break            # hors période de campagne : un seul contrôle
+            [ "$(date +%s)" -lt "$stop" ] || break
+            if grep -qx "watching=true" "$out"; then sleep 300; else sleep 900; fi
+          done
+          echo "keep=$keep" >> "$GITHUB_OUTPUT"
+          printf '\nVeille : %s contrôle(s), %s chasse(s) de campagne lancée(s).\n' "$checks" "$hunts" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: Relancer la veille
+        if: always() && steps.veille.outputs.keep == 'true'
+        run: |
+          gh workflow run live.yml --ref "${{ github.ref_name }}"
+          echo "Veille relancée pour les 5 heures suivantes." >> "$GITHUB_STEP_SUMMARY"
