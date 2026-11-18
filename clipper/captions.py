@@ -139,10 +139,11 @@ def _caption_events(words: list[dict], cfg: dict) -> list[str]:
 
 def build_ass(words: list[dict], *, hook: str, context: str, credit: str, total: float,
               cfg: dict, hook_until: float | None = None,
-              hook_pos: tuple[int, int] | None = None) -> str:
+              hook_pos: tuple[int, int] | None = None, cta: str = "", cta_s: float = 2.8) -> str:
     """Fichier ASS complet : accroche, ligne de contexte, crédit, sous-titres mot à mot.
 
     `hook_pos` centre l'accroche ailleurs qu'en haut (à la jointure en mise en page « split »).
+    `cta` : appel à l'action d'une campagne (« SUBSCRIBE TO TOMO »), affiché les dernières secondes.
     """
     ed = cfg["edit"]
     lines = [HEADER.format(hook_box=cfg["captions"].get("highlight", "&H0000E5FF"))]
@@ -165,5 +166,10 @@ def build_ass(words: list[dict], *, hook: str, context: str, credit: str, total:
     if credit:
         lines.append(f"Dialogue: 1,{ass_time(0)},{ass_time(total)},Credit,,0,0,0,,"
                      "{\\alpha&H30&}" + esc(strip_emoji(credit)))
+    cta_lines = wrap(esc(strip_emoji(cta).upper()), 18, 3) if cta else []
+    if cta_lines and total > hook_end + 1.0:
+        start = max(hook_end + 0.5, total - cta_s)
+        lines.append(f"Dialogue: 6,{ass_time(start)},{ass_time(total)},Hook,,0,0,0,,"
+                     "{\\fad(150,0)\\an5\\pos(540,860)}" + "\\N".join(cta_lines))
     lines.extend(_caption_events(words, cfg))
     return "\n".join(lines) + "\n"

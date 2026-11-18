@@ -43,6 +43,8 @@ streamers:
       same_stream: true                            # un live commencé le 19 reste valable après minuit
       games: ["Grand Theft Auto VI"]
       submit_minutes: 30                           # lien soumis moins de 30 min après la publication
+      vod_clips: 6                                 # clips que l'outil tire lui-même de la rediffusion
+      reminders: ["compte TikTok ou YouTube dédié à GTA 6", "un post = une seule campagne"]
       brief: |
         Streamer: Dasgas Dom (Kick: dasgasd3m), American, speaks English, makes adult jokes.
         Clip funny, emotional and unexpected GTA 6 moments from his live stream: his reaction to a
@@ -55,3 +57,43 @@ streamers:
         On-screen hook: 6 words max, same spirit (e.g. "DOM FINDS A GTA 6 GLITCH").
         Keep his meaning intact. Never invent a reaction, a chat message or gameplay.
         Platform-appropriate moments only: skip explicit material.
+
+  - name: Tomo
+    youtube: "@Tomovids"               # ses lives GTA VI sur YouTube sont la source principale
+    credit: "@Tomovids"                # chaîne exigée à l'écran ou dans la légende
+    credit_prefix: "Tomo ·"            # → « Tomo · @Tomovids » en bas du clip
+    language: en                       # vidéos en anglais obligatoires
+    auto: true
+    paid: true
+    min_views: 1
+    max_per_day: 6                     # « un bon clip vaut mieux que dix bâclés »
+    cta: "SUBSCRIBE TO TOMO ON YOUTUBE"   # appel à l'action exigé, écrit à la fin de chaque clip
+    hashtags: ["#ad", "#tomovids", "#gta6"]            # obligatoires
+    hashtags_mix: ["#tomo", "#gtavi", "#gta", "#gaming", "#funnymoments"]   # varient d'un clip à l'autre
+    caption_lines:
+      - "Subscribe to Tomo on YouTube: @Tomovids"
+    fallback_hooks: ["TOMO PLAYS GTA 6", "WAIT FOR IT", "TOMO WAS NOT READY"]
+    campaign:
+      name: "Tomo GTA VI (Clipping Nation)"
+      platforms: [TikTok, Instagram Reels, YouTube Shorts]
+      opens: "2026-11-19T00:00:00-05:00"           # campagne ouverte le jour de la sortie
+      footage_from: "2026-11-19T00:00:00-05:00"    # ses lives et vidéos GTA VI à partir de la sortie
+      games: ["Grand Theft Auto VI"]
+      submit_minutes: 30
+      vod_clips: 4                                 # clips tirés de chaque live ou vidéo GTA VI
+      reminders: ["likes visibles", "40 % d'audience Tier 1 : capture des stats pays sur leur Discord dès 2 000 vues",
+                  "clip en ligne 30 jours minimum"]
+      # Pas de date limite : budget de 1 000 $, la campagne s'arrête quand il est épuisé.
+      # 40 % d'audience Tier 1 (USA, UK, Canada, Australie) exigés : capture des stats pays
+      # à envoyer sur leur Discord dès 2 000 vues. Les clips doivent rester en ligne 30 jours.
+      brief: |
+        Streamer: Tomo (YouTube @Tomovids), gaming YouTuber, speaks English. Goal: make new people
+        discover Tomo and subscribe to his YouTube channel. Never portray Tomo in a negative light.
+        Clip ONE clear funny, crazy or surprising GTA VI moment: funny and chaotic moments, first
+        reactions to new features, cars, places and missions, crazy stunts, chases and fails, best
+        interactions with other players and characters. Priority: funny moments and first reactions.
+        Cut everything that needs more than a few seconds of context. The hook must give a reason to keep
+        watching in the first 2 seconds. Screen recordings with no clear purpose, random moments or
+        low-effort clips are refused: give a low score to anything without a clear payoff.
+        Title: accurate, no clickbait, no fake context, mention Tomo (e.g. "Tomo's first GTA 6 police chase").
+        On-screen hook: 6 words max.

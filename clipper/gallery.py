@@ -12,7 +12,8 @@ import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .config import ROOT
+from . import campaign
+from .config import ROOT, load_streamers
 from .util import log, run
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -84,6 +85,16 @@ def keep_latest(cards: list[dict], hide: list[str] | None = None) -> list[dict]:
     return [c for c in cards if run_of(c) == latest[c.get("source_url") or c.get("file")]]
 
 
+def active_campaigns(streamers: list[dict] | None = None) -> list[dict]:
+    """Campagnes de streamers.yaml pas encore terminées : une section chacune dans la galerie."""
+    out = []
+    for s in load_streamers() if streamers is None else streamers:
+        camp = campaign.of(s)
+        if camp and not campaign.ended(camp):
+            out.append(campaign.card(s))
+    return out
+
+
 def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
     gc = cfg.get("gallery") or {}
     days, max_clips = int(gc.get("days", 7)), int(gc.get("max_clips", 40))
@@ -136,7 +147,7 @@ def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
             shutil.copy(FONTS / f, out / "fonts" / f)
     (out / ".nojekyll").write_text("")
     data = {"generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "schedule_utc": gc.get("schedule_utc") or [], "clips": clips}
+            "schedule_utc": gc.get("schedule_utc") or [], "campaigns": active_campaigns(), "clips": clips}
     (out / "clips.json").write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     log(f"Galerie : {len(clips)} clip(s) dans {out}")
     return len(clips)

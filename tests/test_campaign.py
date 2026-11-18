@@ -138,3 +138,21 @@ def test_campaign_only_run_skips_everyone_else(monkeypatch, tmp_path):
     others = [{"name": "Bob", "twitch": "bob"}]
     assert hunt.run_hunt(cfg, others + [DOM], tmp_path, tmp_path, campaign_only=True) == 0
     assert seen_cfg == {"twitch": False, "kick": False, "streamers": ["Dasgas Dom"]}
+
+
+def test_gallery_lists_running_campaigns_as_sections(tmp_path):
+    import json
+
+    from clipper import gallery
+    src = tmp_path / "clips"
+    src.mkdir()
+    (src / "a.mp4").write_bytes(b"\x00")
+    (src / "a.json").write_text(json.dumps({"file": "a.mp4", "go": True, "title": "A",
+                                            "made_at": "2026-11-19T18:00:00+00:00",
+                                            "campaign": campaign.card(DOM)}), encoding="utf-8")
+    gallery.build(tmp_path / "site", load_config(), from_dir=src)
+    data = json.loads((tmp_path / "site" / "clips.json").read_text())
+    assert [k["name"] for k in data["campaigns"]] == ["Dom GTA 6 (RUCKUS)", "Tomo GTA VI (Clipping Nation)"]
+    assert data["clips"][0]["campaign"]["name"] == "Dom GTA 6 (RUCKUS)"
+    over = dict(DOM, campaign=dict(campaign.of(DOM), closes="2026-11-01T00:00:00Z"))
+    assert gallery.active_campaigns([over, {"name": "Bob"}]) == []          # terminée : plus de section

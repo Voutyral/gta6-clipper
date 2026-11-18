@@ -156,11 +156,11 @@ def download_audio(url: str, out_dir: Path, name: str = "scan",
     return _download(url, out_dir, name, extra, 5400)
 
 
-def list_entries(url: str, limit: int = 30) -> list[dict]:
-    """Entrées d'une liste (clips d'une chaîne Twitch par exemple), sans téléchargement."""
+def list_entries(url: str, limit: int = 30, extra: list[str] | None = None) -> list[dict]:
+    """Entrées d'une liste (clips d'une chaîne Twitch, lives d'une chaîne YouTube…), sans téléchargement."""
     try:
-        p = run(_base(playlist=True) + ["--flat-playlist", "-J", "--playlist-end", str(limit),
-                                        "--", url], timeout=240)
+        p = run(_base(playlist=True) + ["--flat-playlist", "-J", "--playlist-end", str(limit)]
+                + list(extra or []) + ["--", url], timeout=240)
     except CmdError as exc:
         raise FetchError("Impossible de lister les clips.", _hint(exc.stderr)) from exc
     data = json.loads(p.stdout or "{}")

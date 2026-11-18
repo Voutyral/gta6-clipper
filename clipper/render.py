@@ -213,7 +213,8 @@ def _render(plan: Plan, out: Path, cfg: dict, workdir: Path, flags: set) -> dict
     ass = captions.build_ass(
         words, hook=plan.hook, context=plan.context, credit=credit, total=total, cfg=cfg,
         hook_until=offset + float(ed.get("hook_seconds", 3.5)),
-        hook_pos=(540, 700) if layout == "split" else None)
+        hook_pos=(540, 700) if layout == "split" else None,
+        cta=str((plan.preset or {}).get("cta") or ""))
     (workdir / "subs.ass").write_text(ass, encoding="utf-8")
     fonts = workdir / "fonts"
     if not fonts.exists():

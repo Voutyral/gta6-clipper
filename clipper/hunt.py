@@ -99,7 +99,14 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
             if not ok:
                 drop(reason)
                 continue
-        if not float(hc.get("min_duration_s", 8)) <= f.duration <= float(hc.get("max_duration_s", 120)):
+        vod = bool((f.extra or {}).get("vod"))
+        if vod and (f.extra or {}).get("live"):
+            drop("live encore en cours (la rediffusion viendra après)")
+            continue
+        if vod and 0 < f.duration < 60:
+            drop("rediffusion trop courte")
+            continue
+        if not vod and not float(hc.get("min_duration_s", 8)) <= f.duration <= float(hc.get("max_duration_s", 120)):
             drop("durée hors limites")
             continue
         if hc.get("allowlist_only") and not preset:
@@ -130,6 +137,8 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
             why += f", {f.game} prioritaire"
         if camp:
             why += f", campagne « {camp.get('name') or preset.get('name')} »"
+            if vod:
+                why += ", rediffusion : l'outil y cherche lui-même les moments forts"
         elif preset:
             score *= float(hc.get("allowlist_boost", 2.0))
             why += ", streamer suivi"
@@ -147,7 +156,8 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
         out.append((score, f, preset, why))
     # Campagnes rémunérées d'abord, puis langue connue, puis les clips au dessus du seuil de vues,
     # puis la vitesse.
-    out.sort(key=lambda t: (not campaign.of(t[2]), "langue à vérifier" in t[3], "peu de vues" in t[3], -t[0]))
+    out.sort(key=lambda t: (not campaign.of(t[2]), bool((t[1].extra or {}).get("vod")),
+                            "langue à vérifier" in t[3], "peu de vues" in t[3], -t[0]))
     if hc.get("mix_languages", True) and len(wanted_langs) > 1:
         out = mix_languages(out, wanted_langs)
     unknown_cap = int(hc.get("max_unknown_language", 1))
@@ -209,13 +219,16 @@ def to_request(f: Found, preset: dict, cfg: dict, url: str | None = None) -> Cli
         langs = [spoken]
     elif f.platform != "twitch" or not f.language:   # Twitch filtre déjà la langue à la source
         langs = [str(x).lower() for x in hc.get("require_languages") or []] or None
+    vod = bool((f.extra or {}).get("vod"))
+    count = int(campaign.of(preset).get("vod_clips", 4)) if vod else 1
     return ClipRequest(
         url=url or f.url, credit=preset.get("credit") or (f"@{f.streamer}" if f.streamer else None),
-        layout=preset.get("layout"), count=1, raw="chasse", game_hint=f.game, lang=spoken or None,
+        layout=preset.get("layout"), count=count, raw="chasse", game_hint=f.game, lang=spoken or None,
         min_score=float(preset.get("min_ai_score", hc.get("min_ai_score", 6))), langs=langs,
         meta={"title": f.title, "channel": f.streamer_name, "handle": f"@{f.streamer}" if f.streamer else "",
               "webpage_url": f.url, "platform": f.platform, "views": f.views, "streamer": f.streamer,
-              "created": f.created_at.isoformat(), "found_why": ""})
+              "created": f.created_at.isoformat(), "found_why": "",
+              "duration": f.duration if vod and f.duration else None})
 
 
 # ---------------------------------------------------------------- Un passage complet
@@ -262,6 +275,7 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
             break
         work = base / f"hunt{i}"
         made: list[Result] = []
+        retry = False
         try:
             req = to_request(f, preset, cfg)
             req.meta["found_why"] = why
@@ -281,11 +295,13 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
             results.extend(made)
         except fetch.FetchError as exc:
             errors.append((f.url, str(exc), exc.hint))
+            retry = bool((f.extra or {}).get("vod"))
         except Exception as exc:
             errors.append((f.url, f"{type(exc).__name__} : {exc}", ""))
             log(traceback.format_exc())
         finally:
-            seen[f.key] = {"d": today, "s": f.streamer, "ok": bool(made)}
+            if not retry:
+                seen[f.key] = {"d": today, "s": f.streamer, "ok": bool(made)}
             shutil.rmtree(work, ignore_errors=True)
     save_seen(seen)
 

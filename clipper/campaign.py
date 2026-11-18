@@ -6,6 +6,7 @@ sur tout le reste, et le montage suit le brief : langue, crédit, hashtags, aler
 """
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 
 from .util import game_key
@@ -106,13 +107,29 @@ def brief_for_ai(preset: dict | None) -> str:
     return "\n".join(p for p in parts if p)
 
 
-def hashtags(preset: dict | None) -> list[str]:
-    tags = []
-    for t in (preset or {}).get("hashtags") or []:
+def _tags(values) -> list[str]:
+    out = []
+    for t in values or []:
         t = str(t).strip()
         if t:
-            tags.append(t if t.startswith("#") else "#" + t)
+            out.append(t if t.startswith("#") else "#" + t)
+    return out
+
+
+def hashtags(preset: dict | None, seed: str = "") -> list[str]:
+    """Hashtags exigés, plus quelques-uns pris dans `hashtags_mix` (ils changent d'un clip à l'autre)."""
+    tags = _tags((preset or {}).get("hashtags"))
+    mix = [t for t in _tags((preset or {}).get("hashtags_mix")) if t.lower() not in {x.lower() for x in tags}]
+    if mix:
+        n = min(len(mix), int((preset or {}).get("hashtags_mix_n", 3)))
+        start = int(hashlib.sha1(seed.encode()).hexdigest(), 16) % len(mix)
+        tags += [mix[(start + k) % len(mix)] for k in range(n)]
     return tags
+
+
+def cta(preset: dict | None) -> str:
+    """Appel à l'action écrit à la fin du clip (« SUBSCRIBE TO TOMO ON YOUTUBE »)."""
+    return str((preset or {}).get("cta") or "").strip()
 
 
 def caption_lines(preset: dict | None) -> list[str]:
@@ -135,7 +152,8 @@ def card(preset: dict | None) -> dict:
     return {"name": str(camp.get("name") or preset.get("name") or "Campagne"),
             "platforms": [str(p) for p in camp.get("platforms") or []],
             "opens": str(camp.get("opens") or ""), "closes": str(camp.get("closes") or ""),
-            "submit_minutes": int(camp.get("submit_minutes") or 30)}
+            "submit_minutes": int(camp.get("submit_minutes") or 30),
+            "reminders": [str(r) for r in camp.get("reminders") or [] if str(r).strip()]}
 
 
 def off(value) -> bool:

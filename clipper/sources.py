@@ -52,10 +52,12 @@ class Found:
 
 
 def _when(text: str | None) -> datetime:
+    """Date d'une API ; sans fuseau (« 2026-11-19 14:00:00 » chez Kick), c'est de l'UTC."""
     try:
-        return datetime.fromisoformat(str(text).replace("Z", "+00:00")).astimezone(timezone.utc)
+        d = datetime.fromisoformat(str(text).replace("Z", "+00:00"))
     except Exception:
         return datetime.now(timezone.utc)
+    return d.replace(tzinfo=timezone.utc) if d.tzinfo is None else d.astimezone(timezone.utc)
 
 
 # ---------------------------------------------------------------- Twitch
@@ -175,6 +177,56 @@ def kick_channel_clips(slug: str, *, period: str = "24hr", sort: str = "view", p
     return out
 
 
+def kick_channel_videos(slug: str) -> list[Found]:
+    """Rediffusions (VOD) d'une chaîne Kick : l'outil y repère lui-même les moments forts."""
+    data = _kick_get(f"https://kick.com/api/v2/channels/{slug}/videos")
+    items = data if isinstance(data, list) else (data.get("data") or data.get("videos") or [])
+    out = []
+    for v in items:
+        if not isinstance(v, dict) or not v.get("id"):
+            continue
+        video = v.get("video") or {}
+        uuid = str(video.get("uuid") or "")
+        cats = v.get("categories") or []
+        game = str((cats[0] or {}).get("name") or "") if cats else ""
+        out.append(Found(
+            platform="kick", id=f"vod-{uuid or v['id']}",
+            url=f"https://kick.com/video/{uuid}" if uuid else str(v.get("source") or ""),
+            title=str(v.get("session_title") or ""), views=int(v.get("views") or video.get("views") or 0),
+            duration=float(v.get("duration") or 0) / 1000.0,   # millisecondes chez Kick
+            created_at=_when(v.get("start_time") or v.get("created_at")), streamer=slug, streamer_name=slug,
+            game=game, extra={"vod": True, "m3u8": str(v.get("source") or ""),
+                              "livestream_id": str(v["id"]), "live": bool(v.get("is_live"))}))
+    return out
+
+
+GTA6_WORDS = ("gta 6", "gta vi", "gta6", "gtavi", "grand theft auto vi", "grand theft auto 6")
+
+
+def youtube_channel_videos(handle: str, limit: int = 8) -> list[Found]:
+    """Lives terminés et vidéos récentes d'une chaîne YouTube (lus sans téléchargement)."""
+    from . import fetch  # import local : la veille des lives n'en a pas besoin
+    handle = "@" + str(handle).lstrip("@")
+    out = []
+    for tab in ("streams", "videos"):
+        for e in fetch.list_entries(f"https://www.youtube.com/{handle}/{tab}", limit=limit,
+                                    extra=["--extractor-args", "youtubetab:approximate_date"]):
+            vid = str(e.get("id") or "")
+            if not vid:
+                continue
+            title = str(e.get("title") or "")
+            ts = e.get("timestamp") or e.get("release_timestamp")
+            when = datetime.fromtimestamp(float(ts), timezone.utc) if ts else datetime.now(timezone.utc)
+            out.append(Found(
+                platform="youtube", id=vid, url=f"https://www.youtube.com/watch?v={vid}", title=title,
+                views=int(e.get("view_count") or 0), duration=float(e.get("duration") or 0), created_at=when,
+                streamer=handle.lstrip("@").lower(), streamer_name=handle,
+                game="Grand Theft Auto VI" if any(w in title.lower() for w in GTA6_WORDS) else "",
+                extra={"vod": True, "live": str(e.get("live_status") or "") in ("is_live", "is_upcoming"),
+                       "dated": bool(ts)}))
+    return out
+
+
 # ---------------------------------------------------------------- Tout ensemble
 
 def discover(cfg: dict, streamers: list[dict]) -> tuple[list[Found], list[str]]:
@@ -216,13 +268,17 @@ def discover(cfg: dict, streamers: list[dict]) -> tuple[list[Found], list[str]]:
         if s.get("kick"):
             if camp:
                 # Campagne : tous les clips du stream autorisé, même plusieurs jours après,
-                # les plus vus du mois et les plus récents (page après page).
+                # les plus vus du mois et les plus récents (page après page), plus ses rediffusions
+                # où l'outil fait ses propres clips.
                 since = campaign.window(camp)[0]
                 collect(f"Kick @{s['kick']} (plus vus)", kick_channel_clips, str(s["kick"]), period="30d")
                 collect(f"Kick @{s['kick']} (récents)", kick_channel_clips, str(s["kick"]), period="30d",
                         sort="date", pages=6, since=since)
+                collect(f"Kick @{s['kick']} (rediffusions)", kick_channel_videos, str(s["kick"]))
             else:
                 collect(f"Kick @{s['kick']}", kick_channel_clips, str(s["kick"]), period=period)
+        if s.get("youtube") and camp:
+            collect(f"YouTube {s['youtube']} (lives et vidéos)", youtube_channel_videos, str(s["youtube"]))
     unique: dict[str, Found] = {}
     for f in found:
         unique.setdefault(f.key, f)

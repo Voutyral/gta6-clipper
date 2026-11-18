@@ -6,6 +6,7 @@
     python -m clipper hunt [--dry-run] [--max 3] [--campaign-only]   # chasse aux clips du moment
     python -m clipper gallery --out site           # page de la galerie
     python -m clipper doctor --request "LIEN"   # bilan de santé
+    python -m clipper watch                  # veille : un streamer en campagne est-il en live ?
 """
 from __future__ import annotations
 
@@ -36,10 +37,14 @@ def main(argv: list[str] | None = None) -> int:
     p_gal.add_argument("--from-dir", default=None, help="fiches locales au lieu des releases (essais)")
     p_doc = sub.add_parser("doctor", help="bilan de santé : clés, services, liens")
     p_doc.add_argument("--request", default=None)
+    sub.add_parser("watch", help="veille des lives : lance la chasse quand un streamer en campagne démarre")
     for p in (p_run, p_local, p_radar, p_doc, p_gal):
         p.add_argument("--out", default="out")
         p.add_argument("--work", default=None)
     args = ap.parse_args(argv)
+    if args.cmd == "watch":   # contrôle léger, sans dossier de travail ni ffmpeg
+        from .live import run_watch
+        return run_watch(load_streamers())
 
     cfg, streamers = load_config(), load_streamers()
     outdir = Path(args.out).resolve()

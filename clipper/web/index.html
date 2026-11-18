@@ -85,6 +85,16 @@
 
   /* ---------- Grille : une vignette par clip ---------- */
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  /* ---------- Sections : une par campagne, puis « Autres clips » ---------- */
+  .sec { margin: 24px 2px 0; }
+  .sec:first-child { margin-top: 14px; }
+  .sec h3 { margin: 0; display: flex; align-items: baseline; gap: 8px; font-family: var(--display); font-weight: 400;
+    font-size: 25px; line-height: 1.05; text-transform: uppercase; letter-spacing: .3px; color: var(--paper); }
+  .sec h3 b { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--hook); }
+  .sec-sub { margin-top: 4px; font-family: var(--mono); font-size: 11px; line-height: 1.45; color: var(--muted); }
+  .sec + .grid { margin-top: 10px; }
+  .sec-empty { margin: 10px 2px 0; padding: 14px; border: 1.5px dashed #2c2736; border-radius: 12px;
+    font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: center; }
   .tile { position: relative; border-radius: 14px; overflow: hidden; background: var(--ink-2); aspect-ratio: 9 / 16;
     cursor: pointer; opacity: 0; transform: translateY(10px); animation: drop .45s cubic-bezier(.2, .8, .2, 1) forwards;
     box-shadow: 0 18px 34px -22px rgba(255, 79, 123, .55); user-select: none; -webkit-user-select: none; }
@@ -370,18 +380,47 @@
     return btn;
   }
 
+  const fmtDate = (t) => new Date(t).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short",
+                                                             hour: "2-digit", minute: "2-digit" });
+
+  function campaignWhen(k) {
+    const opens = Date.parse(k.opens), closes = Date.parse(k.closes);
+    if (opens && Date.now() < opens) return `Pas avant ${fmtDate(opens)}.`;
+    if (closes && Date.now() > closes) return "Campagne terminée.";
+    if (closes) return `Jusqu'au ${fmtDate(closes)}.`;
+    return "";
+  }
+
   function campaignNote(c) {
     const k = c.campaign || {};
     const where = (k.platforms || []).join(" ou ") || "les plateformes de la campagne";
-    const fmt = (t) => new Date(t).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short",
-                                                          hour: "2-digit", minute: "2-digit" });
-    const opens = Date.parse(k.opens), closes = Date.parse(k.closes);
-    let when = "";
-    if (opens && Date.now() < opens) when = ` Pas avant ${fmt(opens)}.`;
-    else if (closes && Date.now() > closes) when = " Campagne terminée.";
-    else if (closes) when = ` Jusqu'au ${fmt(closes)}.`;
+    const when = campaignWhen(k);
+    const more = (k.reminders || []).length ? " À respecter : " + k.reminders.join(", ") + "." : "";
     return `💶 ${k.name || "Campagne"} : poste sur ${where}, active « contenu commercial », puis soumets `
-      + `le lien sur Content Rewards dans les ${k.submit_minutes || 30} min.${when}`;
+      + `le lien sur Content Rewards dans les ${k.submit_minutes || 30} min.${when ? " " + when : ""}${more}`;
+  }
+
+  // Sections : une par campagne en cours (ordre de streamers.yaml), puis « Autres clips ».
+  function sections(shown) {
+    const known = data.campaigns || [];
+    const groups = new Map(known.map((k) => [k.name, { name: k.name, camp: k, items: [] }]));
+    const others = { name: "Autres clips", camp: null, items: [] };
+    for (const c of shown) {
+      const name = c.campaign && c.campaign.name;
+      if (!name) { others.items.push(c); continue; }
+      if (!groups.has(name)) groups.set(name, { name, camp: c.campaign, items: [] });
+      groups.get(name).items.push(c);
+    }
+    return [...groups.values(), others];
+  }
+
+  function sectionHead(s) {
+    const k = s.camp;
+    const sub = k ? [(k.platforms || []).join(", "), campaignWhen(k)].filter(Boolean).join(" · ")
+                  : "Chasse du moment, français et anglais, sans campagne";
+    return el("div", { class: "sec" }, el("h3", {}, s.name, el("b", {}, String(s.items.length))),
+      el("div", { class: "sec-sub" }, sub),
+      k && (k.reminders || []).length ? el("div", { class: "sec-sub" }, "⚠ " + k.reminders.join(" · ")) : null);
   }
 
   function ticket(c, i) {
@@ -544,7 +583,7 @@
     const shown = clips.filter(inView);
     count();
     updateDock();
-    if (!shown.length) {
+    if (!shown.length && !(data.campaigns || []).length) {
       const next = nextRun(data.schedule_utc);
       list.append(el("div", { class: "empty" },
         el("strong", {}, view === "done" ? "Rien de posté" : "Tout est posté"),
@@ -552,9 +591,27 @@
           (next ? `Prochaine chasse vers ${next}.` : "La prochaine chasse remplira la liste.")));
       return;
     }
-    const grid = el("div", { class: "grid" });
-    shown.forEach((c, i) => grid.append(tile(c, i)));
-    list.append(grid);
+    const secs = sections(shown);
+    if (secs.length === 1) {   // aucune campagne : une seule grille, comme avant
+      const grid = el("div", { class: "grid" });
+      shown.forEach((c, i) => grid.append(tile(c, i)));
+      list.append(grid);
+      return;
+    }
+    let i = 0;
+    const next = nextRun(data.schedule_utc);
+    for (const s of secs) {
+      if (!s.camp && !s.items.length) continue;   // « Autres clips » vide : rien à montrer
+      list.append(sectionHead(s));
+      if (!s.items.length) {
+        list.append(el("div", { class: "sec-empty" }, view === "done" ? "Rien de posté ici."
+          : "Pas encore de clip" + (next ? `, prochaine chasse vers ${next}.` : ".")));
+        continue;
+      }
+      const grid = el("div", { class: "grid" });
+      s.items.forEach((c) => grid.append(tile(c, i++)));
+      list.append(grid);
+    }
   }
 
   $("pick").addEventListener("click", () => setSelecting(!selecting));

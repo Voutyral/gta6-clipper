@@ -212,7 +212,7 @@ def build_description(desc: str, credit: str, url: str, cfg: dict, game: str = "
         lines.append(f"{src} {credit} ({url})" if credit else f"{src} {url}")
     elif credit:
         lines.append(f"{src} {credit}")
-    lines.append(" ".join(campaign.hashtags(preset) or hashtags_for(game, cfg)))
+    lines.append(" ".join(campaign.hashtags(preset, seed=desc + url) or hashtags_for(game, cfg)))
     return "\n\n".join(lines)
 
 
@@ -401,6 +401,8 @@ def process_request(req: ClipRequest, cfg: dict, streamers: list[dict], work: Pa
     info = fetch.probe(req.url)
     # Ce que la source a déjà dit (chasse) prime sur ce que yt-dlp devine.
     info.update({k: req.meta[k] for k in ("title", "channel", "handle", "webpage_url") if req.meta.get(k)})
+    if not info.get("duration") and req.meta.get("duration"):
+        info["duration"] = req.meta["duration"]   # flux direct (m3u8) d'une rediffusion : durée donnée par Kick
     if info.get("is_live"):
         raise fetch.FetchError("Le live est encore en cours.",
                                "Envoie le lien de la rediffusion ou d'un clip une fois le passage terminé.")
