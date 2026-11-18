@@ -70,7 +70,9 @@ def cards_from_dir(folder: Path) -> list[tuple[dict, dict]]:
 
 def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
     gc = cfg.get("gallery") or {}
-    days, max_clips = int(gc.get("days", 3)), int(gc.get("max_clips", 24))
+    days, max_clips = int(gc.get("days", 7)), int(gc.get("max_clips", 40))
+    # GitHub Pages refuse un site de plus de 1 Go : les vidéos les plus anciennes restent dehors.
+    max_mb, used_mb = float(gc.get("max_mb", 900)), 0.0
     if out.exists():
         shutil.rmtree(out)
     (out / "c").mkdir(parents=True)
@@ -82,6 +84,10 @@ def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
     pairs.sort(key=lambda ca: _when(ca[0].get("made_at", "")), reverse=True)
     clips = []
     for card, assets in pairs[:max_clips]:
+        size = float(card.get("size_mb") or 30)
+        if used_mb + size > max_mb:
+            log(f"Galerie : place pleine ({used_mb:.0f} Mo), les clips plus anciens restent dans les releases.")
+            break
         ok = True
         for key in ("file", "thumb"):
             name = card.get(key)
@@ -102,6 +108,7 @@ def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
             continue
         card = dict(card, src=f"c/{card['file']}", poster=f"c/{card['thumb']}" if card.get("thumb") else "")
         clips.append(card)
+        used_mb += size
     shutil.rmtree(tmp, ignore_errors=True)
     for f in WEB.iterdir():
         shutil.copy(f, out / f.name)

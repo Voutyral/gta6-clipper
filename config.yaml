@@ -98,6 +98,7 @@ hunt:                               # le chasseur : trouve tout seul les clips d
     categories: [grand-theft-auto-vi, grand-theft-auto-v]
 
 gallery:
-  days: 3                           # clips gardés dans la galerie
-  max_clips: 24
+  days: 7                           # clips gardés dans la galerie (les releases durent 7 jours)
+  max_clips: 40
+  max_mb: 900                       # GitHub Pages refuse plus de 1 Go : les plus anciens restent dehors
   schedule_utc: ["05:17", "11:17", "17:17"]   # à garder identique à la ligne cron de chasse.yml
