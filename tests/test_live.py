@@ -1,4 +1,4 @@
-"""Veille des lives, rediffusions découpées par l'outil, et campagne Tomo (YouTube)."""
+"""Veille des lives, rediffusions découpées par l'outil, et campagne sur une chaîne YouTube."""
 from __future__ import annotations
 
 import json
@@ -10,7 +10,12 @@ from clipper.config import load_config, load_streamers
 UTC = timezone.utc
 STREAMERS = load_streamers()
 DOM = next(s for s in STREAMERS if s.get("kick") == "dasgasd3m")
-TOMO = next(s for s in STREAMERS if s.get("youtube") == "@Tomovids")
+# Exemple de campagne YouTube (plus dans streamers.yaml) : appel à l'action et hashtags variés.
+TOMO = {"name": "Tomo", "youtube": "@Tomovids", "credit": "@Tomovids", "language": "en",
+        "cta": "SUBSCRIBE TO TOMO ON YOUTUBE", "hashtags": ["#ad", "#tomovids", "#gta6"],
+        "hashtags_mix": ["#tomo", "#gtavi", "#gta", "#gaming", "#funnymoments"],
+        "campaign": {"name": "Tomo GTA VI", "footage_from": "2026-11-19T00:00:00-05:00",
+                     "games": ["Grand Theft Auto VI"], "vod_clips": 4}}
 T0 = datetime(2026, 11, 19, 14, 0, tzinfo=UTC)
 
 
@@ -37,8 +42,9 @@ def test_watch_starts_at_go_live_then_every_hour_then_after_the_end():
 def test_watch_only_follows_campaigns_with_an_open_window():
     names = lambda now: [s["name"] for s in live.watched(STREAMERS, now)]
     assert names(datetime(2026, 11, 18, 12, 0, tzinfo=UTC)) == []       # trop tôt
-    assert names(T0) == ["Dasgas Dom", "Tomo"]
-    assert names(datetime(2026, 11, 23, tzinfo=UTC)) == ["Tomo"]         # le stream du 19 de Dom est loin
+    assert names(T0) == ["Dasgas Dom"]
+    assert names(datetime(2026, 11, 23, tzinfo=UTC)) == []               # le stream du 19 de Dom est loin
+    assert [s["name"] for s in live.watched([TOMO], datetime(2026, 11, 23, tzinfo=UTC))] == ["Tomo"]
 
 
 def test_kick_replays_are_read(monkeypatch):

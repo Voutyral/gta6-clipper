@@ -152,7 +152,7 @@ def test_gallery_lists_running_campaigns_as_sections(tmp_path):
                                             "campaign": campaign.card(DOM)}), encoding="utf-8")
     gallery.build(tmp_path / "site", load_config(), from_dir=src)
     data = json.loads((tmp_path / "site" / "clips.json").read_text())
-    assert [k["name"] for k in data["campaigns"]] == ["Dom GTA 6 (RUCKUS)", "Tomo GTA VI (Clipping Nation)"]
+    assert [k["name"] for k in data["campaigns"]] == ["Dom GTA 6 (RUCKUS)"]
     assert data["clips"][0]["campaign"]["name"] == "Dom GTA 6 (RUCKUS)"
     over = dict(DOM, campaign=dict(campaign.of(DOM), closes="2026-11-01T00:00:00Z"))
     assert gallery.active_campaigns([over, {"name": "Bob"}]) == []          # terminée : plus de section
