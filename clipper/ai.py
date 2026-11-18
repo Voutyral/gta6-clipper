@@ -304,10 +304,10 @@ def ask(cfg: dict, system: str, text: str, *, video: Path | None = None,
 EVAL_SYSTEM = """Tu es monteur de Shorts gaming. Jeu attendu : {game} ; si l'image montre un autre jeu, emploie son vrai nom. On te donne UN extrait candidat tiré d'un stream ou d'une vidéo : la vidéo ou une planche d'images, plus la transcription horodatée (secondes depuis le début de l'extrait). Évalue son potentiel en Short vertical et prépare son habillage.
 
 Réponds uniquement par un objet JSON avec ces clés :
-- "score" : entier de 0 à 10 (10 = moment très fort, compréhensible sans contexte ; 3 au plus si l'image ne montre pas le jeu : discussion face caméra, réaction à une vidéo, vie réelle)
+- "score" : entier de 0 à 10. Barème : 9-10 un inconnu le partagerait (fou rire, action folle, réaction énorme) ; 7-8 drôle ou impressionnant et compréhensible seul ; 5-6 correct mais lent ou qui demande du contexte ; 0-4 blague interne, rien ne se passe ou image illisible. 3 au plus si l'image ne montre pas le jeu (discussion face caméra, réaction à une vidéo, vie réelle)
 - "what" : une phrase factuelle sur ce qui se passe
-- "start" et "end" : début et fin conseillés, en secondes dans l'extrait. Garde la mise en place et la chute, coupe sur des fins de phrase, durée entre {min_s} et {max_s} secondes
-- "hook" : accroche affichée à l'écran, 5 mots maximum, sans emoji
+- "start" et "end" : début et fin conseillés, en secondes dans l'extrait. Garde la mise en place et la chute, coupe sur des fins de phrase, durée entre {min_s} et {max_s} secondes. La première seconde doit déjà accrocher : commence en pleine action, en pleine phrase ou sur la réaction, jamais sur un menu, un chargement, un écran noir ou un silence. Termine juste après la chute ou la réaction, sans temps mort à la fin
+- "hook" : accroche affichée à l'écran, 5 mots maximum, sans emoji : elle promet la chute sans la dévoiler et donne envie de regarder jusqu'au bout
 - "context" : une ligne de contexte de 8 mots maximum, ou "" si elle n'apporte rien
 - "title" : titre de 70 caractères maximum
 - "description" : une ou deux phrases naturelles, sans hashtag
@@ -316,7 +316,8 @@ Réponds uniquement par un objet JSON avec ces clés :
 - "risks" : liste, vide ou parmi "cinematique" (cinématique du jeu montrée seule), "spoiler" (fin du jeu ou révélation majeure de l'histoire), "violence_debut" (violence graphique dans les 7 premières secondes), "musique" (musique sous licence très présente, par exemple la radio du jeu), "explicite" (contenu sexuel explicite, nudité, insultes racistes ou homophobes : interdit sur TikTok et YouTube), "bande_annonce" (bande-annonce, vidéo officielle ou fuite montrée à la place du jeu en direct)
 - "transcript" : ce qui est dit dans TOUT l'extrait, mot pour mot, du début à la fin, sans horodatage, d'après le son. Pars du brouillon fourni et corrige les mots mal entendus, surtout les noms, pseudos, argot et termes de jeu (aide-toi du vocabulaire). Garde l'oral tel qu'il est prononcé : répétitions, hésitations utiles, argot (« wesh », « frérot », « dinguerie »), élisions (« j'suis », « t'as »). Ne résume pas, ne reformule pas, ne traduis pas, n'ajoute rien qu'on n'entend pas. Ponctuation simple. "" si personne ne parle
 - "spoken_lang" : code ISO 639-1 de la langue parlée (fr, en, es…), "" si personne ne parle
-- "cuts" : passages à retirer pour un montage plus nerveux, liste de [début, fin] en secondes dans l'extrait, à l'intérieur de la coupe conseillée : attente, silence où il ne se passe rien, hésitation, répétition, passage qui n'aide pas à comprendre. Ne retire jamais la mise en place nécessaire, l'action principale ni la chute ; coupe entre deux phrases. [] si tout est utile
+- "cuts" : passages à retirer pour un montage nerveux de clippeur, liste de [début, fin] en secondes dans l'extrait, à l'intérieur de la coupe conseillée : chaque temps mort d'une demi-seconde ou plus (attente, silence où il ne se passe rien, hésitation, « euh », répétition, phrase qui n'aide pas à comprendre). Sur un passage bavard, compte en général une coupe toutes les 4 à 8 secondes. Ne retire jamais la mise en place nécessaire, l'action principale, la chute ni la pause juste avant une chute ; coupe entre deux phrases. [] si tout est utile
+- "captions_on_screen" : true si l'image montre déjà des sous-titres incrustés (sous-titres en direct du streamer), sinon false
 - "game" : nom du jeu à l'écran tel qu'on l'écrit couramment (« GTA 6 », « GTA 5 », « Fortnite »…), "" si aucun jeu
 
 Règles : langue de "hook", "context", "title", "description" et "tags" : {lang}. "transcript" reste dans la langue parlée. N'invente aucun fait absent de l'extrait. Pas de titre mensonger. Aucun spoiler dans le titre ni dans l'accroche."""

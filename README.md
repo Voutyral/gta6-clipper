@@ -2,7 +2,7 @@
 
 Deux façons de l'utiliser, toutes deux depuis le téléphone :
 
-* **Automatique** : trois fois par jour, le chasseur va chercher les clips GTA les plus regardés du moment sur Twitch et Kick, garde les meilleurs, les monte et les range dans ta galerie. Tu n'as plus qu'à appuyer sur **Partager**.
+* **Automatique** : toutes les 2 heures, le chasseur va chercher les clips GTA les plus regardés du moment sur Twitch et Kick, garde les meilleurs, les monte et les range dans ta galerie (30 clips par jour au plus, hors campagne). Tu n'as plus qu'à appuyer sur **Partager**.
 * **À la demande** : tu colles un lien dans une issue, tu reçois le Short monté.
 
 Le calcul se fait sur les serveurs de GitHub : aucun ordinateur à laisser allumé.
@@ -98,6 +98,16 @@ Les autres clips trouvés par la chasse sont montés avec la mention « accord �
 Un bloc `campaign:` sous un streamer (exemple : Dasgas Dom) applique le brief de la campagne. La chasse ne prend que la source autorisée (stream daté, jeu demandé, même live après minuit) et la fait passer avant tout le reste, jusqu'à la date limite. Le montage suit la langue du streamer, écrit son crédit, ajoute les hashtags exigés et la mention `#ad`, coupe la musique si demandé, et met « SPOILER WARNING » sur la couverture d'un moment d'histoire sans rien dévoiler. Dans la galerie, le bouton **Légende** copie la légende complète, et la fiche rappelle les plateformes acceptées, le réglage « contenu commercial » et le délai de soumission du lien. Les jours de stream, une ligne `cron` de `chasse.yml` ajoute des passages réservés aux campagnes.
 
 **Veille des lives** (`live.yml`) : la chasse de campagne part dès que le streamer lance son live, puis toutes les heures pendant le live et pendant 6 heures après la fin (l'outil tire aussi ses propres clips de la rediffusion). Tant que la fenêtre du stream est ouverte, une chasse part au moins toutes les 2 heures, même si le live n'est pas vu. GitHub lance les tâches programmées de ce dépôt avec 8 à 14 heures de retard (problème connu des comptes récents) : autour du stream, de 24 heures avant jusqu'à 6 heures après la fin, la veille tourne donc d'un seul tenant (un contrôle toutes les 5 minutes) et se relance elle-même toutes les 5 heures. Elle démarre seule quand `streamers.yaml` change ; sinon **Actions**, **Veille des lives**, **Run workflow**.
+
+## Technique de montage
+
+Chaque clip suit la méthode des comptes de clips qui marchent :
+
+* **Première seconde** : l'IA fait commencer le clip en pleine action, en pleine phrase ou sur la réaction, jamais sur un menu, un chargement ou un silence. Un écran noir au début est retiré d'office. Si le moment fort arrive tard, un aperçu de 1,8 s ouvre le clip (sauf campagne qui l'interdit).
+* **Coupes** : l'IA retire les temps morts qu'elle voit (hésitations, répétitions, attente), une coupe toutes les 4 à 8 secondes sur un passage bavard. En plus, l'outil raccourcit les silences entre deux phrases quand le son est calme et que l'image ne bouge presque pas, en laissant un petit souffle. Jamais pendant l'action, jamais plus d'un quart du clip. Un morceau sur deux est légèrement zoomé pour marquer la coupe. `tighten: off` sous un streamer coupe ce resserrage (Dasgas Dom : son brief demande de laisser respirer).
+* **Sous-titres** : mot à mot, 3 mots au plus, coupés aux virgules et aux fins de phrase, jamais sur un petit mot qui annonce la suite (« RUN OUT » puis « THE DOOR »). Si le stream affiche déjà ses propres sous-titres, l'outil n'en ajoute pas par-dessus.
+* **Cadrage** : webcam en haut et jeu en bas quand l'IA repère la webcam ; sinon le jeu occupe la moitié de l'écran (`zoom: 1.5`), avec un renfort de netteté.
+* **Son** : voix compressée doucement, puis volume cible des plateformes (-14 LUFS).
 
 ## Français et anglais
 

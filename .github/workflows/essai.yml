@@ -1,0 +1,106 @@
+name: Essai montage
+
+# Essai temporaire de la nouvelle technique de montage, sur une branche à part :
+# 5 clips du 18 novembre remontés, plus une vraie rediffusion de Dasgas Dom passée par le
+# chemin de la campagne. Résultats dans la release « essai-montage » (hors galerie).
+on:
+  push:
+    branches: [essai-montage]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: essai-montage
+  cancel-in-progress: true
+
+jobs:
+  essai:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Outils et dépendances
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg
+          pip install -q -r requirements.txt
+          pip install -q -U "yt-dlp[default,curl-cffi]"
+
+      - name: Cache des modèles de sous-titres
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/clipper
+            ~/.cache/huggingface
+          key: asr-parakeet-v3-whisper-small
+
+      - name: Rien dans les releases du jour ni sur YouTube
+        run: |
+          sed -i 's/^  release: true/  release: false/' config.yaml
+          grep -n "release:" config.yaml
+
+      - name: Cinq clips du 18 novembre, nouvelle technique
+        env:
+          REQUEST_TEXT: |
+            https://www.twitch.tv/mungo/clip/SincereUnusualMomDogFace-uVaN2mzVj9NYkjPn
+            https://www.twitch.tv/owlfr_/clip/ImpartialCogentEyeballOMGScoots-NuIvkeMGHDEyBoow
+            https://www.twitch.tv/syndicate/clip/LuckyCautiousNikudonBIRB-MfYcKwJXy-Ln9p5A
+            https://www.twitch.tv/deansocool/clip/EagerBrainyMangetoutCoolStoryBro-0SwVubxIgW4V6Xyv
+            https://www.twitch.tv/mehdoche/clip/OriginalSpineyCookieTheThing-pc3Ufp13OOVYqCKz
+        run: python -m clipper run --out out || true
+
+      - name: Rediffusion de Dasgas Dom, chemin de la campagne
+        continue-on-error: true
+        timeout-minutes: 35
+        run: |
+          python - <<'EOF'
+          from pathlib import Path
+          from clipper import fetch, hunt, pipeline, sources
+          from clipper.config import load_config, load_streamers
+          cfg, st = load_config(), load_streamers()
+          dom = next(s for s in st if s.get("kick") == "dasgasd3m")
+          vods = [v for v in sources.kick_channel_videos("dasgasd3m")
+                  if not v.extra.get("live") and 900 <= v.duration <= 7200]
+          print(f"{len(vods)} rediffusion(s) entre 15 min et 2 h")
+          v = min(vods, key=lambda x: x.duration)
+          print(f"Essai sur {v.url} ({v.duration / 60:.0f} min, {v.game}, « {v.title} »)")
+          req = hunt.to_request(v, dom, cfg)
+          req.count, req.min_score = 2, None
+          try:
+              res = pipeline.process_request(req, cfg, st, Path("work-vod"), Path("out"), 7)
+          except fetch.FetchError as exc:
+              print(f"Page de la rediffusion illisible ({exc}), essai sur le flux direct")
+              req = hunt.to_request(v, dom, cfg, url=v.extra["m3u8"])
+              req.count, req.min_score = 2, None
+              res = pipeline.process_request(req, cfg, st, Path("work-vod"), Path("out"), 7)
+          for r in res:
+              pipeline.write_sidecars(r)
+              print(f"{'GO' if r.go else 'NO-GO'} {r.path.name} {r.duration:.1f} s {r.problems} {r.notes}")
+          EOF
+
+      - name: Ranger les résultats
+        if: always()
+        run: |
+          ls -la out || true
+          gh release view essai-montage >/dev/null 2>&1 || \
+            gh release create essai-montage --prerelease --title "Essai montage" \
+              --notes "Essai de la nouvelle technique de montage (hors galerie). À supprimer après vérification."
+          shopt -s nullglob
+          files=(out/*.mp4 out/*.json out/*.jpg)
+          if [ ${#files[@]} -gt 0 ]; then gh release upload essai-montage "${files[@]}" --clobber; fi

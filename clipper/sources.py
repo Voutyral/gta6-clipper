@@ -8,6 +8,7 @@ Vérifié depuis les serveurs GitHub le 18 novembre 2026.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -62,14 +63,23 @@ def _when(text: str | None) -> datetime:
 
 # ---------------------------------------------------------------- Twitch
 
-def _gql(query: str) -> dict:
-    r = requests.post(TWITCH_GQL, timeout=30, json={"query": query},
-                      headers={"Client-Id": TWITCH_CLIENT_ID, "Content-Type": "application/json"})
-    r.raise_for_status()
-    data = r.json()
-    if data.get("errors"):
-        raise RuntimeError(str(data["errors"])[:300])
-    return data.get("data") or {}
+def _gql(query: str, tries: int = 3) -> dict:
+    """Requête GraphQL Twitch. « service error » est passager (une recherche sur deux le 18/11) : on réessaie."""
+    for attempt in range(tries):
+        r = requests.post(TWITCH_GQL, timeout=30, json={"query": query},
+                          headers={"Client-Id": TWITCH_CLIENT_ID, "Content-Type": "application/json"})
+        if r.status_code >= 500 and attempt + 1 < tries:
+            time.sleep(2 + 3 * attempt)
+            continue
+        r.raise_for_status()
+        data = r.json()
+        if data.get("errors"):
+            if attempt + 1 < tries and "service error" in str(data["errors"]).lower():
+                time.sleep(2 + 3 * attempt)
+                continue
+            raise RuntimeError(str(data["errors"])[:300])
+        return data.get("data") or {}
+    return {}
 
 
 def _criteria(period: str, languages: list[str] | None) -> str:

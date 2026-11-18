@@ -51,6 +51,12 @@ def save_seen(seen: dict, keep_days: int = 30) -> None:
     SEEN.write_text(json.dumps(keep, indent=0, ensure_ascii=False))
 
 
+def made_today_total(seen: dict) -> int:
+    """Clips montés aujourd'hui (UTC), tous streamers confondus."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return sum(1 for v in seen.values() if v.get("ok") and v.get("d") == today)
+
+
 def made_today(seen: dict, streamer: str) -> int:
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     s = streamer.lower()
@@ -265,6 +271,13 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
     want = max_clips or int(hc.get("max_per_run", 3))
     if not max_clips and ranked and campaign.of(ranked[0][2]):
         want = max(want, int(hc.get("campaign_max_per_run", want)))   # jour de campagne : on en sort plus
+    # Plafond du jour pour les clips hors campagne : la chasse passe souvent, la galerie reste lisible.
+    day_cap = int(hc.get("max_per_day", 0) or 0)
+    free_left = None
+    if day_cap and not max_clips:
+        free_left = max(0, day_cap - made_today_total(seen))
+        if free_left == 0:
+            log(f"Plafond du jour atteint ({day_cap} clips) : seuls les clips de campagne sont montés.")
     budget = max(int(hc.get("max_candidates", want * 2)), want * 2)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     results: list[Result] = []
@@ -273,6 +286,8 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
     for i, (_, f, preset, why) in enumerate(ranked[:budget]):
         if len(results) >= want:
             break
+        if free_left is not None and not campaign.of(preset) and free_left <= 0:
+            continue
         work = base / f"hunt{i}"
         made: list[Result] = []
         retry = False
@@ -292,6 +307,8 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
                 deliver_result(res, cfg)
             if not made:
                 skipped.append(f"@{f.streamer} · {f.title[:60]} (note trop basse, langue ou contrôle NO-GO)")
+            if free_left is not None and not campaign.of(preset):
+                free_left -= len(made)
             results.extend(made)
         except fetch.FetchError as exc:
             errors.append((f.url, str(exc), exc.hint))
