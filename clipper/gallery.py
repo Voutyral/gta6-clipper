@@ -68,6 +68,22 @@ def cards_from_dir(folder: Path) -> list[tuple[dict, dict]]:
     return out
 
 
+def keep_latest(cards: list[dict], hide: list[str] | None = None) -> list[dict]:
+    """Clips à montrer : sans les clips masqués, et une seule version par source.
+
+    Un même clip relancé plus tard (nouveaux sous-titres, par exemple) ne garde que sa version
+    la plus récente. Plusieurs moments tirés d'une même source au même lancement restent tous.
+    """
+    hidden = {h.strip().rsplit(".", 1)[0] for h in (hide or []) if h.strip()}
+    cards = [c for c in cards if str(c.get("file", "")).rsplit(".", 1)[0] not in hidden]
+    run_of = lambda c: str(c.get("file", ""))[:15]   # « AAAAMMJJ-HHMMSS » : un lancement  # noqa: E731
+    latest: dict[str, str] = {}
+    for c in cards:
+        src = c.get("source_url") or c.get("file")
+        latest[src] = max(latest.get(src, ""), run_of(c))
+    return [c for c in cards if run_of(c) == latest[c.get("source_url") or c.get("file")]]
+
+
 def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
     gc = cfg.get("gallery") or {}
     days, max_clips = int(gc.get("days", 7)), int(gc.get("max_clips", 40))
@@ -81,6 +97,8 @@ def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
     repo = os.environ.get("GITHUB_REPOSITORY", "")
     pairs = cards_from_dir(from_dir) if from_dir else cards_from_releases(repo, days, tmp)
     pairs = [(c, a) for c, a in pairs if c.get("go") and c.get("file")]
+    shown = {id(c) for c in keep_latest([c for c, _ in pairs], gc.get("hide"))}
+    pairs = [(c, a) for c, a in pairs if id(c) in shown]
     pairs.sort(key=lambda ca: _when(ca[0].get("made_at", "")), reverse=True)
     clips = []
     for card, assets in pairs[:max_clips]:

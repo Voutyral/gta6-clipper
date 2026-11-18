@@ -101,4 +101,6 @@ gallery:
   days: 7                           # clips gardés dans la galerie (les releases durent 7 jours)
   max_clips: 40
   max_mb: 900                       # GitHub Pages refuse plus de 1 Go : les plus anciens restent dehors
+  hide:                             # clips à ne jamais montrer (nom du fichier, sans .mp4)
+    - 20261118-030954-suryanshexd-00   # stream en hindi, sans GTA à l'image
   schedule_utc: ["05:17", "11:17", "17:17"]   # à garder identique à la ligne cron de chasse.yml

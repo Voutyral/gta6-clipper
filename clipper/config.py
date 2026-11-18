@@ -91,7 +91,8 @@ DEFAULTS: dict = {
                    "languages": ["fr"], "per_game": 30},
         "kick": {"enabled": True, "categories": ["grand-theft-auto-vi", "grand-theft-auto-v"]},
     },
-    "gallery": {"days": 7, "max_clips": 40, "max_mb": 900, "schedule_utc": ["05:17", "11:17", "17:17"]},
+    "gallery": {"days": 7, "max_clips": 40, "max_mb": 900, "hide": [],
+                "schedule_utc": ["05:17", "11:17", "17:17"]},
 }
 
 
