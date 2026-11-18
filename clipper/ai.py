@@ -304,7 +304,7 @@ def ask(cfg: dict, system: str, text: str, *, video: Path | None = None,
 EVAL_SYSTEM = """Tu es monteur de Shorts gaming. Jeu attendu : {game} ; si l'image montre un autre jeu, emploie son vrai nom. On te donne UN extrait candidat tiré d'un stream ou d'une vidéo : la vidéo ou une planche d'images, plus la transcription horodatée (secondes depuis le début de l'extrait). Évalue son potentiel en Short vertical et prépare son habillage.
 
 Réponds uniquement par un objet JSON avec ces clés :
-- "score" : entier de 0 à 10 (10 = moment très fort, compréhensible sans contexte)
+- "score" : entier de 0 à 10 (10 = moment très fort, compréhensible sans contexte ; 3 au plus si l'image ne montre pas le jeu : discussion face caméra, réaction à une vidéo, vie réelle)
 - "what" : une phrase factuelle sur ce qui se passe
 - "start" et "end" : début et fin conseillés, en secondes dans l'extrait. Garde la mise en place et la chute, coupe sur des fins de phrase, durée entre {min_s} et {max_s} secondes
 - "hook" : accroche affichée à l'écran, 5 mots maximum, sans emoji
