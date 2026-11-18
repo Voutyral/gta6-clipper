@@ -109,12 +109,17 @@ def _gemini(cfg: dict, parts: list[dict], want_json: bool) -> str | None:
                 _state["gemini_model"] = model
                 try:
                     cand = r.json()["candidates"][0]
-                    return "".join(p.get("text", "") for p in cand["content"]["parts"])
+                    # Les parties « thought » sont le raisonnement interne du modèle, pas la réponse.
+                    text = "".join(p.get("text", "") for p in cand["content"]["parts"]
+                                   if not p.get("thought"))
                 except Exception:
-                    log(f"Gemini : réponse vide ou bloquée ({r.text[:200]})")
-                    return None
-            if r.status_code == 429 and attempt == 0:
-                time.sleep(25)
+                    text = ""
+                if text.strip():
+                    return text
+                log(f"Gemini {model} : réponse vide ou bloquée ({r.text[:300]})")
+                break
+            if r.status_code in (429, 500, 503) and attempt == 0:
+                time.sleep(20 if r.status_code == 429 else 8)
                 continue
             log(f"Gemini {model} : HTTP {r.status_code} {r.text[:200]}")
             break
@@ -296,7 +301,13 @@ def evaluate(cfg: dict, *, text: str, dur: float, peak: float | None, title: str
             + (f" Pic sonore à {peak:.1f} s." if peak is not None else "")
             + "\nTranscription :\n" + (text or "(aucune parole détectée)"))
     answer, name = ask(cfg, system, user, video=video, sheet=sheet)
-    return parse_json(answer), name
+    data = parse_json(answer)
+    if answer and data is None:
+        log(f"IA « {name} » : réponse illisible, ignorée : {answer[:400]!r}")
+    if data is not None:
+        log(f"IA « {name} » : score {data.get('score')}, accroche « {data.get('hook')} », "
+            f"coupe {data.get('start')} → {data.get('end')} s, risques {data.get('risks')}")
+    return data, (name if data is not None else "")
 
 
 LEARN_SYSTEM = """Tu regardes une vidéo pour en tirer une méthode réutilisable (regarder, retenir, refaire). Écris une fiche en français, en Markdown, avec ces parties :

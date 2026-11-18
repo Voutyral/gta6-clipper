@@ -188,7 +188,7 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
     if not title:
         base = (info.get("title") or meta["game"]).strip()
         who = credit.lstrip("@")
-        title = f"{who} sur {meta['game']} : {base}" if who and who.lower() not in base.lower() else base
+        title = f"{who} : {base}" if who and who.lower() not in base.lower() else base
     if not tags:
         tags = [meta["game"], "gaming", "clip"] + ([credit.lstrip("@")] if credit else [])
     return Plan(

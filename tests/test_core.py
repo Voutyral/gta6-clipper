@@ -148,7 +148,7 @@ def test_plan_without_ai_falls_back_to_simple_rules():
                       ClipRequest(url="https://x.tv/v"), {"title": "Braquage", "channel": "Bob"},
                       cfg, {}, "@Bob", 1)
     assert plan.hook == clean_hook(cfg["metadata"]["fallback_hooks"][1])
-    assert plan.title == "Bob sur GTA 6 : Braquage" and plan.tags
+    assert plan.title == "Bob : Braquage" and plan.tags
 
 
 def test_cut_never_lands_inside_a_word():
