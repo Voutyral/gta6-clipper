@@ -2,10 +2,14 @@ name: Chasseur de clips
 
 # Trois fois par jour : clips les plus regardés du moment (Twitch, Kick, streamers suivis),
 # montage des meilleurs, galerie mise à jour, et une issue pour te prévenir.
-# Heures UTC : 05:17, 11:17, 17:17 (06:17, 12:17, 18:17 à Paris en hiver).
+# Heures UTC : 05:17, 11:17, 17:17 (12:17, 18:17, 00:17 au Laos ; 06:17, 12:17, 18:17 à Paris en hiver).
+# GitHub retarde ou saute parfois un lancement programmé : deux créneaux de secours suivent
+# chaque chasse, et ne font rien si une chasse programmée a réussi dans les 2 h 30 précédentes.
 on:
   schedule:
     - cron: "17 5,11,17 * * *"
+    - cron: "52 5,11,17 * * *"
+    - cron: "37 6,12,18 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -28,7 +32,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      skip: ${{ steps.recent.outputs.skip }}
+    steps:
+      - name: Une chasse programmée vient-elle de passer ?
+        id: recent
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/chasse.yml/runs?event=schedule&status=success&per_page=6" \
+                --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }})
+                       | select((now - (.created_at | fromdateiso8601)) < 9000)] | length")
+          if [ "${n:-0}" -gt 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Créneau de secours : une chasse a déjà réussi il y a moins de 2 h 30, rien à faire." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   hunt:
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
