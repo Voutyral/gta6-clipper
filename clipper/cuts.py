@@ -74,18 +74,30 @@ def from_ai(raw, extract_start: float, start: float, end: float, words: list[dic
         a, b = _snap(a, b, words)
         if b - a >= MIN_CUT_S:
             found.append((a, b))
-    found = _merge(found)[: int(ed.get("max_cuts", 6))]
+    found = _merge(found)
     if not found:
         return []
     dur = end - start
-    kept = sum(e - s for s, e in keep_segments(start, end, found))
-    # Garde-fous : le clip doit rester un vrai moment, pas une suite de flashs.
-    if kept < max(float(ed.get("min_after_cuts_s", 10)), dur * float(ed.get("min_keep_ratio", 0.55))):
-        log(f"Coupes de l'IA ignorées : il ne resterait que {kept:.1f} s sur {dur:.1f} s.")
+    # Garde-fous : le clip doit rester un vrai moment, pas une suite de flashs. Si l'IA coupe trop,
+    # on garde ses coupes les plus longues (les vrais temps morts) tant que le clip reste assez long.
+    floor = max(float(ed.get("min_after_cuts_s", 10)), dur * float(ed.get("min_keep_ratio", 0.55)))
+    limit = int(ed.get("max_cuts", 6))
+    chosen: list[tuple[float, float]] = []
+    for a, b in sorted(found, key=lambda c: c[1] - c[0], reverse=True):
+        trial = sorted(chosen + [(a, b)])
+        if len(trial) > limit or not _pieces_ok(start, end, trial):
+            continue
+        if sum(e - s for s, e in keep_segments(start, end, trial)) >= floor:
+            chosen = trial
+    if not chosen:
+        log(f"Coupes de l'IA ignorées : aucune ne laisse au moins {floor:.1f} s sur {dur:.1f} s.")
         return []
-    where = ", ".join(f"à {a - start:.1f} s (−{b - a:.1f} s)" for a, b in found)
-    log(f"Coupes dynamiques : {len(found)} temps mort(s) retiré(s), {dur:.1f} s → {kept:.1f} s ({where}).")
-    return found
+    kept = sum(e - s for s, e in keep_segments(start, end, chosen))
+    if len(chosen) < len(found):
+        log(f"Coupes de l'IA : {len(chosen)} gardées sur {len(found)} (le clip garde au moins {floor:.1f} s).")
+    where = ", ".join(f"à {a - start:.1f} s (−{b - a:.1f} s)" for a, b in chosen)
+    log(f"Coupes dynamiques : {len(chosen)} temps mort(s) retiré(s), {dur:.1f} s → {kept:.1f} s ({where}).")
+    return chosen
 
 
 # ---------------------------------------------------------------- Temps morts retirés d'office
@@ -104,7 +116,7 @@ def _pieces_ok(start: float, end: float, cuts: list[tuple[float, float]]) -> boo
 
 
 def dead_gaps(words: list[dict], start: float, end: float, db, motion, *, hop: float = 0.05,
-              fps: float = 10.0, ed: dict | None = None) -> list[tuple[float, float]]:
+              fps: float = 10.0, ed: dict | None = None, why: dict | None = None) -> list[tuple[float, float]]:
     """Silences à raccourcir : entre deux phrases, son calme et image presque immobile.
 
     `db` : niveau sonore tous les `hop` s depuis `start` ; `motion` : mouvement `fps` fois par seconde.
@@ -135,6 +147,7 @@ def dead_gaps(words: list[dict], start: float, end: float, db, motion, *, hop: f
         return []
     base_motion = float(np.median(motion)) if len(motion) else 0.0
     found: list[tuple[float, float]] = []
+    why = why if why is not None else {}
     spans = [(start, ws[0]["s"] - 0.12)] + [(a["e"], b["s"]) for a, b in pairwise(ws)]
     for k, (g0, g1) in enumerate(spans):
         if g1 - g0 < gap_s:
@@ -142,13 +155,16 @@ def dead_gaps(words: list[dict], start: float, end: float, db, motion, *, hop: f
         a, b = (g0, g1) if k == 0 else (g0 + leave / 2, g1 - leave / 2)
         if b - a < MIN_CUT_S:
             continue
+        why["silences"] = why.get("silences", 0) + 1
         loud = db[idx(a, 1 / hop, len(db)):idx(b, 1 / hop, len(db)) + 1]
         if not len(loud) or float(np.percentile(loud, 95)) > voice - quiet_db:
+            why["son"] = why.get("son", 0) + 1
             continue       # son du jeu ou réaction : ce n'est pas un temps mort
         if len(motion):
             moving = motion[idx(a, fps, len(motion)):idx(b, fps, len(motion)) + 1]
             m = float(np.mean(moving)) if len(moving) else 0.0
             if m > calm or m > max(1.5 * base_motion, base_motion + 2.0):
+                why["image"] = why.get("image", 0) + 1
                 continue   # il se passe quelque chose à l'image (action, ou plus que d'habitude)
         found.append((round(a, 3), round(b, 3)))
     return found
@@ -173,7 +189,12 @@ def tighten(src, start: float, end: float, words: list[dict], ed: dict,
     except Exception as exc:  # noqa: BLE001  (mesure impossible : on garde les coupes de l'IA)
         log(f"Resserrage ignoré : {exc}")
         return fixed
-    gaps = dead_gaps(words, start, end, db, motion, ed=ed)
+    why: dict = {}
+    gaps = dead_gaps(words, start, end, db, motion, ed=ed, why=why)
+    if not gaps:
+        n = why.get("silences", 0)
+        log(f"Resserrage : rien à raccourcir ({n} silence(s) de plus de {float(ed.get('tighten_gap_s', 0.75)):g} s"
+            + (f", {why.get('son', 0)} avec du son, {why.get('image', 0)} avec de l'action" if n else "") + ").")
     budget = dur * float(ed.get("tighten_max_share", 0.25))
     limit = int(ed.get("tighten_max", 8))
     chosen: list[tuple[float, float]] = []

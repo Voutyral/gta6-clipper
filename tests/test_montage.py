@@ -89,6 +89,19 @@ def test_tighten_keeps_ai_cuts_respects_budget_and_can_be_switched_off(monkeypat
     assert not cuts.tighten_on(dict(ED, tighten=False), None)
 
 
+def test_hook_lines_are_balanced_and_never_end_on_a_small_word():
+    assert captions.balanced("GOOD NEWS AND BAD NEWS", 18) == ["GOOD NEWS", "AND BAD NEWS"]
+    assert captions.balanced("INTO THE SUNSET I DIE", 18) == ["INTO THE SUNSET", "I DIE"]
+    assert captions.balanced("IL SAUTE  DU (PONT)", 18) == ["IL SAUTE DU (PONT)"]
+
+
+def test_too_many_ai_cuts_keep_the_longest_instead_of_none():
+    # 4 coupes de l'IA sur 30 s : toutes ensemble, il resterait 14 s (moins de 55 %) ; on garde
+    # les plus longues tant que le clip garde au moins 16,5 s.
+    got = cuts.from_ai([[2, 5], [8, 14], [17, 20], [23, 26]], 0.0, 0.0, 30.0, [], ED)
+    assert got == [(2.0, 5.0), (8.0, 14.0), (17.0, 20.0)]
+
+
 def test_ai_prompt_still_formats_and_asks_for_the_new_fields():
     text = ai.EVAL_SYSTEM.format(game="GTA 6", min_s=15, max_s=45, lang="fr")
     assert "captions_on_screen" in text and "première seconde" in text and "Barème" in text
@@ -144,3 +157,7 @@ def test_daily_cap_stops_ordinary_clips_but_not_the_campaign(monkeypatch, tmp_pa
     (tmp_path / "seen.json").write_text(json.dumps(seen))
     hunt.run_hunt(cfg, [], tmp_path, tmp_path)
     assert tried == ["https://www.twitch.tv/bob/clip/new1"]
+    # Les clips d'un streamer en campagne ne comptent pas dans le plafond des autres.
+    dom = {"name": "Dom", "kick": "dasgasd3m", "campaign": {"name": "C"}}
+    paid = {f"kick:{i}": {"d": today, "s": "dasgasd3m", "ok": True} for i in range(40)}
+    assert hunt.made_today_total(paid, [dom]) == 0 and hunt.made_today_total(paid, []) == 40

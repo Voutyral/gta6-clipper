@@ -92,7 +92,7 @@ hunt:                               # le chasseur : trouve tout seul les clips d
   max_per_run: 4                    # clips montés par passage (un passage toutes les 2 heures)
   max_per_day: 30                   # plafond du jour hors campagne (les clips de campagne passent toujours)
   campaign_max_per_run: 5           # quand une campagne de streamers.yaml a des clips à monter
-  max_candidates: 8                 # clips essayés au maximum par passage
+  max_candidates: 16                # clips essayés au maximum par passage (les refus sont écartés avant montage)
   mix_languages: true               # alterne français et anglais (sinon l'anglais, plus vu, prend tout)
   min_ai_score: 6                   # note minimale de Gemini (sur 10) pour garder un clip
   game_boost:                       # jeux à privilégier : leur score est multiplié

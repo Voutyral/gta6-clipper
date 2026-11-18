@@ -91,7 +91,7 @@ DEFAULTS: dict = {
         "max_per_run": 4,
         "max_per_day": 30,
         "campaign_max_per_run": 5,
-        "max_candidates": 8,
+        "max_candidates": 16,
         "mix_languages": True,
         "min_ai_score": 6,
         "game_boost": {"Grand Theft Auto VI": 3},

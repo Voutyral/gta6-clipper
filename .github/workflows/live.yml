@@ -8,7 +8,8 @@ name: Veille des lives
 # GitHub lance les tâches programmées de ce dépôt avec 8 à 14 heures de retard (compte récent).
 # Autour du stream d'une campagne (de 24 h avant la fenêtre à 6 h après la fin du live), la veille
 # tourne donc d'un seul tenant : un contrôle toutes les 5 minutes pendant 5 heures, puis elle se
-# relance elle-même, sans attendre l'horaire. Elle démarre aussi quand ce fichier, clipper/live.py
+# relance elle-même, sans attendre l'horaire. Pendant ce temps, elle lance aussi une chasse normale
+# dès que la dernière date de plus de 2 heures. Elle démarre aussi quand ce fichier, clipper/live.py
 # ou streamers.yaml change. En dehors de ces périodes : un seul contrôle par lancement.
 on:
   schedule:
@@ -80,7 +81,13 @@ jobs:
           git config user.name "clipper-bot"
           git config user.email "clipper-bot@users.noreply.github.com"
           stop=$(( $(date +%s) + 300 * 60 ))   # 5 heures de veille par lancement, puis relance
-          checks=0; hunts=0; keep=""
+          checks=0; hunts=0; regular=0; keep=""; sent=0
+          # Heure de la dernière chasse normale (programmée, à la main ou lancée ici), annulées exclues.
+          last_regular() {
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/chasse.yml/runs?per_page=15" --jq \
+              '[.workflow_runs[] | select(.display_title != "Chasse de campagne")
+                | select(.conclusion != "cancelled") | .created_at | fromdateiso8601] | max // 0' 2>/dev/null || echo 0
+          }
           while :; do
             git pull -q --rebase --autostash   # dernière version du code et de streamers.yaml
             out=$(mktemp); sum=$(mktemp)
@@ -98,12 +105,25 @@ jobs:
             # Dernière réponse lisible : un contrôle qui plante ne coupe pas la veille.
             grep -qx "keep=true" "$out" && keep=true
             grep -qx "keep=false" "$out" && keep=false
+            # Lancement de GTA 6 : GitHub retarde les chasses programmées de plusieurs heures. Tant que
+            # la veille tourne d'un seul tenant, elle lance une chasse normale si la dernière date de
+            # plus de 2 heures (la porte de chasse.yml évite les doublons avec les lancements en retard).
+            # Garde-fous : jamais plus d'une chasse normale lancée ici toutes les 2 heures, et rien si
+            # GitHub ne répond pas (heure inconnue).
+            now=$(date +%s)
+            if [ "$keep" = true ] && [ $(( now - sent )) -ge 7200 ]; then
+              last=$(last_regular)
+              if [ "${last:-0}" -gt 0 ] && [ $(( now - last )) -ge 7200 ]; then
+                gh workflow run chasse.yml && regular=$((regular + 1)) && sent=$now
+              fi
+            fi
             [ "$keep" != false ] || break            # hors période de campagne : un seul contrôle
             [ "$(date +%s)" -lt "$stop" ] || break
             if grep -qx "watching=true" "$out"; then sleep 300; else sleep 900; fi
           done
           echo "keep=$keep" >> "$GITHUB_OUTPUT"
-          printf '\nVeille : %s contrôle(s), %s chasse(s) de campagne lancée(s).\n' "$checks" "$hunts" >> "$GITHUB_STEP_SUMMARY"
+          printf '\nVeille : %s contrôle(s), %s chasse(s) de campagne et %s chasse(s) normale(s) lancée(s).\n' \
+            "$checks" "$hunts" "$regular" >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
       - name: Relancer la veille

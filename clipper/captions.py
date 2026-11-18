@@ -119,6 +119,24 @@ def group_words(words: list[dict], max_words: int = 3, max_chars: int = 14,
     return groups
 
 
+def balanced(text: str, width: int) -> list[str]:
+    """Une ligne si le texte tient, sinon deux lignes de longueurs proches (« GOOD NEWS / AND BAD NEWS »),
+    la première ne finissant pas sur un petit mot. Plus long : découpe habituelle."""
+    words = text.split()
+    text = " ".join(words)   # un emoji retiré laisse un double espace
+    if len(text) <= width or len(words) < 2:
+        return [text] if text else []
+    best = None
+    for i in range(1, len(words)):
+        a, b = " ".join(words[:i]), " ".join(words[i:])
+        if len(a) > width or len(b) > width:
+            continue
+        cost = abs(len(a) - len(b)) + (12 if words[i - 1].lower().replace("’", "'") in WEAK else 0)
+        if best is None or cost < best[0]:
+            best = (cost, [a, b])
+    return best[1] if best else wrap(text, width, 2)
+
+
 def wrap(text: str, width: int, max_lines: int = 3) -> list[str]:
     lines, cur = [], ""
     for word in text.split():
@@ -174,7 +192,7 @@ def build_ass(words: list[dict], *, hook: str, context: str, credit: str, total:
     ed = cfg["edit"]
     lines = [HEADER.format(hook_box=cfg["captions"].get("highlight", "&H0000E5FF"))]
     hook_end = min(total, hook_until if hook_until is not None else float(ed.get("hook_seconds", 3.5)))
-    hook_lines = wrap(esc(strip_emoji(hook).upper()), 18, 2) if hook else []
+    hook_lines = balanced(esc(strip_emoji(hook).upper()), 18) if hook else []
     top = 190
     if hook_lines:
         place = ""

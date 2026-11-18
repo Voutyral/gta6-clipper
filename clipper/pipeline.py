@@ -442,6 +442,16 @@ def process_request(req: ClipRequest, cfg: dict, streamers: list[dict], work: Pa
         for p in low:
             log(f"Passage écarté : note IA {p.ai_score:g} sous le seuil {req.min_score:g} ({p.what}).")
         plans = [p for p in plans if p not in low]
+        # Chasse automatique : un passage que le contrôle refusera de toute façon n'est pas monté
+        # (une minute gagnée par refus, donc plus de candidats essayés dans le même passage).
+        allow = {"spoiler"} if preset.get("story_ok") else set()
+        block = {str(r) for r in preset.get("strict_risks") or []}
+        doomed = [p for p in plans if any(r not in allow and (r in qc.RISK_LABELS or r in block)
+                                          for r in p.risks or [])]
+        for p in doomed:
+            why = ", ".join(qc.RISK_LABELS.get(r, r) for r in p.risks if r not in allow)
+            log(f"Passage écarté avant montage : {why} ({p.what}).")
+        plans = [p for p in plans if p not in doomed]
     results: list[Result] = []
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     for k, plan in enumerate(plans):

@@ -7,6 +7,9 @@ name: Chasseur de clips
 # lancement arrivé moins de 80 minutes après une autre chasse réussie ne fait rien.
 # Les 19 et 20 novembre (stream GTA 6 de Dasgas Dom, campagne RUCKUS) : la veille des lives lance
 # aussi des chasses réservées aux streamers en campagne, dès le début du live puis toutes les heures.
+# Nom affiché du lancement : la porte d'entrée ci-dessous ne compte que les chasses normales.
+run-name: ${{ github.event.inputs.campaign_only == 'true' && 'Chasse de campagne' || 'Chasseur de clips' }}
+
 on:
   schedule:
     - cron: "17 */2 * * *"
@@ -45,14 +48,16 @@ jobs:
       - name: Une chasse vient-elle de passer ?
         id: recent
         # Lancements programmés seulement (GitHub en livre parfois plusieurs d'un coup, en retard) :
-        # rien à faire si une chasse a réussi il y a moins de 80 minutes. Les chasses lancées à la
-        # main ou par la veille des lives partent toujours.
+        # rien à faire si une chasse normale a réussi il y a moins de 80 minutes. Les chasses de
+        # campagne (veille des lives) ne comptent pas : le jour du stream, les deux tournent.
+        # Les chasses lancées à la main ou par la veille partent toujours.
         if: github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/chasse.yml/runs?status=success&per_page=8" \
                 --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }})
+                       | select(.display_title != \"Chasse de campagne\")
                        | select((now - (.created_at | fromdateiso8601)) < 4800)] | length")
           if [ "${n:-0}" -gt 0 ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"

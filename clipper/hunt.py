@@ -51,10 +51,13 @@ def save_seen(seen: dict, keep_days: int = 30) -> None:
     SEEN.write_text(json.dumps(keep, indent=0, ensure_ascii=False))
 
 
-def made_today_total(seen: dict) -> int:
-    """Clips montés aujourd'hui (UTC), tous streamers confondus."""
+def made_today_total(seen: dict, streamers: list[dict] | None = None) -> int:
+    """Clips montés aujourd'hui (UTC) hors streamers en campagne (ceux-là ont leur propre rythme)."""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    return sum(1 for v in seen.values() if v.get("ok") and v.get("d") == today)
+    paid = {str(s.get(k, "")).lower().lstrip("@") for s in streamers or [] if campaign.of(s)
+            for k in ("kick", "twitch", "youtube", "name")} - {""}
+    return sum(1 for v in seen.values()
+               if v.get("ok") and v.get("d") == today and str(v.get("s", "")).lower() not in paid)
 
 
 def made_today(seen: dict, streamer: str) -> int:
@@ -275,7 +278,7 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
     day_cap = int(hc.get("max_per_day", 0) or 0)
     free_left = None
     if day_cap and not max_clips:
-        free_left = max(0, day_cap - made_today_total(seen))
+        free_left = max(0, day_cap - made_today_total(seen, streamers))
         if free_left == 0:
             log(f"Plafond du jour atteint ({day_cap} clips) : seuls les clips de campagne sont montés.")
     budget = max(int(hc.get("max_candidates", want * 2)), want * 2)
