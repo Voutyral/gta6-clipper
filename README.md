@@ -27,7 +27,7 @@ Sans Telegram, tout marche quand même : le clip arrive par le lien de télécha
 1. Va sur `aistudio.google.com`, **Get API key**, **Create API key**.
 2. Ajoute-la en secret GitHub sous le nom `GEMINI_API_KEY`.
 
-Avec cette clé, Gemini voit l'image et entend le son de chaque passage : il choisit le meilleur, resserre la coupe, écrit accroche et titre, et signale cinématiques, spoilers et violence en ouverture. Sans elle, le programme se rabat sur l'IA gratuite de GitHub (texte et planche d'images), puis sur des règles simples.
+Avec cette clé, Gemini voit l'image et entend le son de chaque passage : il choisit le meilleur, resserre la coupe, écrit accroche et titre, et signale cinématiques, spoilers et violence en ouverture. Sans elle, le programme applique des règles simples : moments forts repérés au son, accroche tirée d'une liste. L'IA gratuite de GitHub ne répondait pas sur ce dépôt lors des essais (même l'outil officiel de GitHub échouait) ; le programme la réessaie à chaque lancement et s'en passe si elle reste fermée.
 
 ### 3. Premier essai
 
@@ -110,9 +110,13 @@ Secret `ANTHROPIC_API_KEY` : utilisée si Gemini est absent.
 
 Vérifié en conditions réelles : lecture des demandes, repérage des moments forts, les quatre mises en page, aperçu, zoom, bruitages, musique, sous-titres, contrôle GO / NO-GO, coupe à l'image près (33,07 s pour 33 s demandés), niveau sonore (−14,8 LUFS), téléchargement par yt-dlp d'une section et d'une longue vidéo à travers un serveur web local.
 
-Pas vérifiable hors de GitHub, donc validé seulement au premier vrai lancement : les sites eux-mêmes (Twitch, Kick, YouTube), le modèle de sous-titres Whisper, Telegram, le lien de téléchargement, les IA (Gemini, GitHub Models, Claude) et l'envoi YouTube. Chaque échec est écrit en clair dans l'issue avec la marche à suivre.
+Vérifié ensuite sur GitHub, le 16 novembre 2026, avec une vidéo libre de droits : installation, téléchargement, sous-titres Whisper, montage, contrôle et lien de téléchargement.
+
+Reste à valider avec tes clés et tes liens : Telegram, Gemini, l'envoi YouTube, et les sites eux-mêmes (Twitch, Kick). Chaque échec est écrit en clair dans l'issue avec la marche à suivre.
 
 ## Dépannage
+
+* **Tout vérifier d'un coup** : onglet **Actions**, **Diagnostic**, **Run workflow**. Le bilan dit si Telegram, Gemini et l'envoi YouTube répondent, et teste les liens que tu lui donnes.
 
 * **Rien ne se passe** : l'issue doit être ouverte par le propriétaire du dépôt. Regarde l'onglet **Actions**.
 * **Pas de message Telegram** : appuie sur **Démarrer** dans ton bot, puis relance. Le programme retient ta discussion au premier passage.

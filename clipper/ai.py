@@ -156,7 +156,9 @@ def _github_models(cfg: dict) -> list[str]:
         ids: list[str] = []
         try:
             r = requests.get("https://models.github.ai/catalog/models", headers=_github_headers(), timeout=30)
-            if r.status_code == 200:
+            if r.status_code == 200 and _is_stub(r):
+                pass   # service fermé pour ce dépôt : l'appel suivant le signalera une fois
+            elif r.status_code == 200:
                 data = r.json()
                 items = data if isinstance(data, list) else data.get("models", [])
                 ids = [str(m.get("id")) for m in items if isinstance(m, dict) and m.get("id")]
@@ -177,6 +179,12 @@ def _github_models(cfg: dict) -> list[str]:
     return found or wanted
 
 
+def _is_stub(r) -> bool:
+    """Le service répond parfois un simple « OK » en texte brut : il n'est pas ouvert pour ce dépôt."""
+    return str(getattr(r, "headers", {}).get("content-type", "")).startswith("text/plain") \
+        and (r.text or "").strip() == "OK"
+
+
 def _github_once(model: str, system: str, text: str, sheet: bytes | None) -> tuple[str | None, int]:
     content: list[dict] = [{"type": "text", "text": text}]
     if sheet:
@@ -190,6 +198,8 @@ def _github_once(model: str, system: str, text: str, sheet: bytes | None) -> tup
     if r.status_code != 200:
         log(f"GitHub Models {model} : HTTP {r.status_code} {r.text[:200]}")
         return None, r.status_code
+    if _is_stub(r):
+        return None, -1
     try:
         out = r.json()["choices"][0]["message"].get("content")
         if isinstance(out, list):   # certains modèles répondent par morceaux
@@ -214,6 +224,10 @@ def _github(cfg: dict, system: str, text: str, sheet: bytes | None) -> str | Non
             if out:
                 _state["github_model"] = model
                 return out
+            if code == -1:
+                log("IA gratuite de GitHub : le service n'est pas ouvert pour ce dépôt, on s'en passe.")
+                _state["off"].add("github")
+                return None
             if code in (401, 403):
                 return None
     return None

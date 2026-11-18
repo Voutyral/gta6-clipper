@@ -4,6 +4,7 @@
     python -m clipper run --request "LIEN 12:30-13:10 @streamer"
     python -m clipper local video.mp4 --options "0:40-1:10 @streamer #crop"
     python -m clipper radar [--dry-run]
+    python -m clipper doctor --request "LIEN"   # bilan de santé
 """
 from __future__ import annotations
 
@@ -27,7 +28,9 @@ def main(argv: list[str] | None = None) -> int:
     p_local.add_argument("--options", default="", help='ex. "0:40-1:10 @streamer #crop x2"')
     p_radar = sub.add_parser("radar", help="clips du jour des streamers autorisés")
     p_radar.add_argument("--dry-run", action="store_true")
-    for p in (p_run, p_local, p_radar):
+    p_doc = sub.add_parser("doctor", help="bilan de santé : clés, services, liens")
+    p_doc.add_argument("--request", default=None)
+    for p in (p_run, p_local, p_radar, p_doc):
         p.add_argument("--out", default="out")
         p.add_argument("--work", default=None)
     args = ap.parse_args(argv)
@@ -67,6 +70,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "radar":
         from .radar import run_radar
         return run_radar(cfg, streamers, base, outdir, dry_run=args.dry_run)
+
+    if args.cmd == "doctor":
+        from .doctor import run_doctor
+        text = args.request if args.request is not None else os.environ.get("REQUEST_TEXT", "")
+        return run_doctor(text, cfg)
     return 1
 
 

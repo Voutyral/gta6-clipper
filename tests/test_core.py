@@ -210,13 +210,15 @@ def test_github_models_fall_back_to_text_and_explain_empty_answers(monkeypatch):
     calls = []
 
     def fake_get(url, **kw):
-        return types.SimpleNamespace(status_code=200, json=lambda: [{"id": "openai/gpt-4o-mini"}, {"id": "openai/other"}], text="")
+        return types.SimpleNamespace(status_code=200, headers={"content-type": "application/json"}, text="[]",
+                                     json=lambda: [{"id": "openai/gpt-4o-mini"}, {"id": "openai/other"}])
 
     def fake_post(url, json=None, **kw):
         has_image = isinstance(json["messages"][1]["content"], list)
         calls.append((json["model"], has_image))
         body = {"choices": [{"message": {"content": None if has_image else '{"score": 7}'}}]}
-        return types.SimpleNamespace(status_code=200, json=lambda: body, text=str(body))
+        return types.SimpleNamespace(status_code=200, headers={"content-type": "application/json"},
+                                     json=lambda: body, text=str(body))
 
     monkeypatch.setenv("GITHUB_TOKEN", "x" * 10)
     monkeypatch.setattr(ai.requests, "get", fake_get)
@@ -226,3 +228,24 @@ def test_github_models_fall_back_to_text_and_explain_empty_answers(monkeypatch):
     out = ai._github(cfg, "système", "texte", b"\xff\xd8image")
     assert out == '{"score": 7}'
     assert calls == [("openai/gpt-4o-mini", True), ("openai/gpt-4o-mini", False)]
+
+
+def test_github_models_closed_service_is_dropped_once(monkeypatch):
+    import types
+
+    cfg = load_config()
+    calls = []
+
+    def stub(*a, **k):
+        calls.append(1)
+        return types.SimpleNamespace(status_code=200, headers={"content-type": "text/plain"}, text="OK\r\n",
+                                     json=lambda: (_ for _ in ()).throw(ValueError("pas du JSON")))
+
+    monkeypatch.setenv("GITHUB_TOKEN", "x" * 10)
+    monkeypatch.setattr(ai.requests, "get", stub)
+    monkeypatch.setattr(ai.requests, "post", stub)
+    monkeypatch.setitem(ai._state, "github_model", None)
+    monkeypatch.setitem(ai._state, "github_catalog", None)
+    monkeypatch.setitem(ai._state, "off", set())
+    assert ai._github(cfg, "s", "t", b"img") is None
+    assert "github" in ai._state["off"] and len(calls) == 2   # catalogue + un seul appel

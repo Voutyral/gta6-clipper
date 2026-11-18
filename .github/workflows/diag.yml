@@ -1,61 +1,66 @@
-name: Diagnostic IA
+name: Diagnostic
 
-# Outil de mise au point : montre comment répond l'IA gratuite de GitHub depuis ce dépôt.
+# Bilan de santé en un bouton : Actions > Diagnostic > Run workflow.
+# Vérifie Telegram, les clés d'IA, l'envoi YouTube et, si tu en donnes, des liens.
 on:
   workflow_dispatch:
+    inputs:
+      links:
+        description: "Liens à tester (optionnel)"
+        required: false
+        type: string
 
 permissions:
-  contents: read
+  contents: write
   models: read
 
 jobs:
   diag:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
+      REQUEST_TEXT: ${{ github.event.inputs.links }}
+      GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      YTDLP_PROXY: ${{ secrets.YTDLP_PROXY }}
+      YTDLP_COOKIES_B64: ${{ secrets.YTDLP_COOKIES_B64 }}
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
     steps:
-      - name: Appel direct, sans suivre les redirections
-        run: |
-          body='{"model":"openai/gpt-4o-mini","messages":[{"role":"user","content":"Reponds par un seul mot: bonjour"}]}'
-          echo "=== POST chat/completions"
-          curl -sS -i -m 60 -X POST https://models.github.ai/inference/chat/completions \
-            -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
-            -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
-            -d "$body" | head -c 1500 || true
-          echo
-          echo "=== GET catalog/models"
-          curl -sS -i -m 60 https://models.github.ai/catalog/models \
-            -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" | head -c 1500 || true
-          echo
-          echo "=== Même appel avec python-requests"
-          python3 - <<'EOF'
-          import os, requests
-          h = {"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}", "Accept": "application/vnd.github+json",
-               "Content-Type": "application/json"}
-          r = requests.post("https://models.github.ai/inference/chat/completions", headers=h, timeout=60,
-                            json={"model": "openai/gpt-4o-mini",
-                                  "messages": [{"role": "user", "content": "Reponds par un seul mot: bonjour"}]})
-          print("statut", r.status_code, "| url finale", r.url, "| redirections", [x.status_code for x in r.history])
-          print("type", r.headers.get("content-type"), "| corps", repr(r.text[:400]))
-          r = requests.post("https://models.github.ai/inference/chat/completions", headers=h, timeout=60,
-                            allow_redirects=False,
-                            json={"model": "openai/gpt-4o-mini",
-                                  "messages": [{"role": "user", "content": "Reponds par un seul mot: bonjour"}]})
-          print("sans redirection : statut", r.status_code, "| location", r.headers.get("location"),
-                "| corps", repr(r.text[:200]))
-          EOF
+      - uses: actions/checkout@v4
 
-      - name: Action officielle de GitHub
-        id: official
-        continue-on-error: true
-        uses: actions/ai-inference@v2
+      - uses: actions/setup-python@v5
         with:
-          model: openai/gpt-4o-mini
-          prompt: "Reponds par un seul mot: bonjour"
+          python-version: "3.12"
+          cache: pip
 
-      - name: Réponse de l'action officielle
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Outils et dépendances
         run: |
-          echo "resultat: ${{ steps.official.outcome }}"
-          echo "reponse: ${{ steps.official.outputs.response }}"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg
+          pip install -q -r requirements.txt
+          pip install -q -U "yt-dlp[default,curl-cffi]"
+
+      - name: Bilan de santé
+        run: python -m clipper doctor
+
+      - name: Enregistrer l'état
+        if: always()
+        run: |
+          git config user.name "clipper-bot"
+          git config user.email "clipper-bot@users.noreply.github.com"
+          git add -A state || true
+          if ! git diff --cached --quiet; then
+            git commit -q -m "État du clippeur"
+            git pull -q --rebase
+            git push -q
+          fi
