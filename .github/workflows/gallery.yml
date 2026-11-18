@@ -1,0 +1,64 @@
+name: Galerie
+
+# Page web des clips prêts à poster (GitHub Pages). Appelée après chaque clip et chaque chasse.
+# Si Pages n'est pas activé sur le dépôt, rien n'est publié et le reste fonctionne normalement.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Pages est-il activé ?
+        id: check
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/pages" >/dev/null 2>&1; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Galerie inactive : active GitHub Pages (Settings > Pages > Source : GitHub Actions)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.enabled == 'true'
+
+      - uses: actions/setup-python@v5
+        if: steps.check.outputs.enabled == 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Construire la galerie
+        if: steps.check.outputs.enabled == 'true'
+        run: |
+          pip install -q PyYAML requests
+          python -m clipper gallery --out site
+
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.check.outputs.enabled == 'true'
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

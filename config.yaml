@@ -27,6 +27,7 @@ fetch:
 
 edit:
   layout: auto                      # auto | blur (jeu centré, fond flou) | crop (plein écran) | split (caméra en haut)
+  auto_facecam: true                # l'IA repère la webcam du streamer : caméra en haut, jeu en bas
   zoom: 1.25                        # zoom du jeu en mise en page blur
   teaser: auto                      # aperçu du moment fort en ouverture : auto | on | off
   teaser_s: 1.8
@@ -63,11 +64,31 @@ youtube:
   mode: off                         # off | private | public (il faut aussi les 3 secrets YT_*, voir README)
   category_id: "20"                 # 20 = jeux vidéo
 
-radar:
+hunt:                               # le chasseur : trouve tout seul les clips du moment
   enabled: true
-  range: 24hr                       # 24hr | 7d | 30d
-  min_views: 300
-  max_per_streamer: 2
-  max_per_run: 4
-  require_keywords: false           # true : ne garde que les clips dont le titre contient un mot-clé
-  keywords: ["gta", "grand theft auto", "vice city", "leonida"]
+  max_per_run: 3                    # clips montés par passage (3 passages par jour)
+  max_candidates: 6                 # clips essayés au maximum par passage
+  min_ai_score: 6                   # note minimale de Gemini (sur 10) pour garder un clip
+  min_views: 150                    # vues minimales sur le clip d'origine
+  max_age_hours: 30
+  min_duration_s: 8
+  max_duration_s: 120
+  max_per_streamer_day: 2           # pour varier les streamers
+  allowlist_only: false             # true : uniquement les streamers de streamers.yaml
+  allowlist_boost: 2.0              # priorité donnée aux streamers de streamers.yaml
+  blocked_streamers: []             # pseudos à ne jamais prendre
+  exclude_words: [spoiler, ending, "fin du jeu", "final mission", "dernière mission", cinématique, cinematic, cutscene]
+  require_languages: [fr]           # langue parlée exigée (vérifiée à la transcription pour Kick)
+  twitch:
+    enabled: true
+    games: ["Grand Theft Auto VI", "Grand Theft Auto V"]
+    languages: [fr]                 # ajoute en pour les clips anglais : [fr, en]
+    per_game: 30
+  kick:
+    enabled: true
+    categories: [grand-theft-auto-vi, grand-theft-auto-v]
+
+gallery:
+  days: 3                           # clips gardés dans la galerie
+  max_clips: 24
+  schedule_utc: ["05:17", "11:17", "17:17"]   # à garder identique à la ligne cron de chasse.yml

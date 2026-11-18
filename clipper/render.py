@@ -43,6 +43,7 @@ class Plan:
     source_url: str = ""
     source_time: float = 0.0   # position du début du fichier dans la vidéo d'origine
     lang: str = ""
+    ai_score: float | None = None
 
 
 def _facecam(preset: dict | None):

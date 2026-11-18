@@ -1,6 +1,7 @@
 """Enchaînement complet : demande → source → moments forts → montage → contrôle → livraison."""
 from __future__ import annotations
 
+import json
 import shutil
 import traceback
 from dataclasses import dataclass, field
@@ -12,7 +13,7 @@ from . import verify as qc
 from .config import match_streamer
 from .render import Plan, contact_sheet, make_proxy, render
 from .request import ClipRequest, parse_requests
-from .util import fmt_ts, log, probe_media, slugify
+from .util import fmt_ts, log, probe_media, run, slugify
 
 EXAMPLE = "https://www.twitch.tv/videos/123456 1:02:30-1:03:10 @streamer"
 
@@ -50,6 +51,7 @@ class Result:
     lang: str = "fr"
     link: str = ""
     yt: dict = field(default_factory=dict)
+    meta: dict = field(default_factory=dict)   # infos pour la galerie
 
 
 # ---------------------------------------------------------------- 1. Source et candidats
@@ -153,19 +155,40 @@ def build_description(desc: str, credit: str, url: str, cfg: dict) -> str:
     return "\n\n".join(lines)
 
 
+def facecam_box(raw) -> dict | None:
+    """Webcam repérée par l'IA, au format [ymin, xmin, ymax, xmax] sur 1000. None si douteuse."""
+    try:
+        y0, x0, y1, x1 = (float(v) for v in raw)
+    except Exception:
+        return None
+    if not (0 <= x0 < x1 <= 1000 and 0 <= y0 < y1 <= 1000):
+        return None
+    x, y, w, h = x0 / 1000, y0 / 1000, (x1 - x0) / 1000, (y1 - y0) / 1000
+    aspect = (w / h) * (16 / 9)          # proportions réelles sur une image 16:9
+    if not (0.012 <= w * h <= 0.30 and 0.7 <= aspect <= 2.6):
+        return None
+    return {"x": round(x, 4), "y": round(y, 4), "w": round(w, 4), "h": round(h, 4)}
+
+
 def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipRequest, info: dict,
                cfg: dict, preset: dict, credit: str, idx: int) -> Plan:
     det, meta = cfg["detection"], cfg["metadata"]
     dur = c.end - c.start
     start, end, score = c.start, c.end, float(c.score)
+    ai_score = None
     hook, context, title, desc, what = req.hook or "", "", "", "", ""
     tags: list[str] = []
     risks: list[str] = []
     if ev:
         try:
-            score = float(ev.get("score", 0)) + min(0.9, c.score / 10.0)   # le son départage
+            ai_score = float(ev.get("score", 0))
+            score = ai_score + min(0.9, c.score / 10.0)   # le son départage
         except (TypeError, ValueError):
             pass
+        box = facecam_box(ev.get("facecam"))
+        if (box and cfg["edit"].get("auto_facecam", True) and not req.layout
+                and not preset.get("facecam") and not preset.get("layout")):
+            preset = dict(preset, facecam=box, layout="split")
         if not c.locked:
             try:
                 s, e = float(ev.get("start", 0)), float(ev.get("end", dur))
@@ -197,7 +220,7 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
         description=build_description(desc, credit, info.get("webpage_url") or req.url, cfg),
         tags=tags, layout=req.layout or "auto", preset=preset, flags=set(req.flags), score=score,
         what=what, risks=risks, source_url=info.get("webpage_url") or req.url,
-        source_time=c.origin + start, lang=c.lang)
+        source_time=c.origin + start, lang=c.lang, ai_score=ai_score)
 
 
 def plan_candidates(cands: list[Candidate], req: ClipRequest, info: dict, cfg: dict, preset: dict,
@@ -213,6 +236,9 @@ def plan_candidates(cands: list[Candidate], req: ClipRequest, info: dict, cfg: d
         dur = c.end - c.start
         c.words, c.lang = transcribe.transcribe(
             c.src, c.start, dur, model_name=cfg["captions"]["whisper_model"], workdir=work)
+        if req.langs and c.lang and c.lang not in req.langs and len(c.words) >= 6:
+            log(f"Passage écarté : on y parle « {c.lang} », langues voulues {req.langs}.")
+            continue
         db = detect.energy_profile(c.src, hop=0.1, ss=c.start, dur=dur)
         peaks = [c.start + p for p in detect.find_peaks(db, 0.1, int(cfg["edit"]["max_punches"]))]
         if c.peak is not None and not peaks:
@@ -227,7 +253,7 @@ def plan_candidates(cands: list[Candidate], req: ClipRequest, info: dict, cfg: d
                 cfg, text=transcribe.words_to_lines(c.words, c.start), dur=dur,
                 peak=(c.peak - c.start) if c.peak is not None else None,
                 title=info.get("title", ""), credit=credit, lang=lang_out, video=video,
-                sheet=sh.read_bytes() if sh else None)
+                sheet=sh.read_bytes() if sh else None, game=req.game_hint)
             used = used or name
         plans.append(build_plan(c, ev, peaks, req, info, cfg, preset, credit, i))
     plans.sort(key=lambda p: p.score, reverse=True)
@@ -241,6 +267,8 @@ def process_request(req: ClipRequest, cfg: dict, streamers: list[dict], work: Pa
     log(f"\n=== Demande {idx + 1} : {req.url}")
     work.mkdir(parents=True, exist_ok=True)
     info = fetch.probe(req.url)
+    # Ce que la source a déjà dit (chasse) prime sur ce que yt-dlp devine.
+    info.update({k: req.meta[k] for k in ("title", "channel", "handle", "webpage_url") if req.meta.get(k)})
     if info.get("is_live"):
         raise fetch.FetchError("Le live est encore en cours.",
                                "Envoie le lien de la rediffusion ou d'un clip une fois le passage terminé.")
@@ -251,6 +279,11 @@ def process_request(req: ClipRequest, cfg: dict, streamers: list[dict], work: Pa
     cands = acquire(req, info, cfg, work)
     log(f"{len(cands)} passage(s) candidat(s).")
     plans, provider = plan_candidates(cands, req, info, cfg, preset, credit, work, n)
+    if req.min_score is not None:
+        low = [p for p in plans if p.ai_score is not None and p.ai_score < req.min_score]
+        for p in low:
+            log(f"Passage écarté : note IA {p.ai_score:g} sous le seuil {req.min_score:g} ({p.what}).")
+        plans = [p for p in plans if p not in low]
     results: list[Result] = []
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     for k, plan in enumerate(plans):
@@ -265,14 +298,43 @@ def process_request(req: ClipRequest, cfg: dict, streamers: list[dict], work: Pa
             hook=plan.hook, go=check["go"], problems=check["problems"], notes=check["notes"],
             duration=check["duration"], size_mb=check["size_mb"], credit=credit,
             source_url=plan.source_url, facts=facts, provider=provider,
-            paid=bool(preset.get("paid")), lang=req.lang or cfg["metadata"]["language"]))
+            paid=bool(preset.get("paid")), lang=req.lang or cfg["metadata"]["language"],
+            meta={"ai_score": plan.ai_score, "what": plan.what, "streamer": req.meta.get("streamer") or credit.lstrip("@"),
+                  "platform": req.meta.get("platform", ""), "views": req.meta.get("views"),
+                  "source_title": info.get("title", ""), "found_why": req.meta.get("found_why", ""),
+                  "layout": facts.get("layout")}))
     return results
+
+
+def write_sidecars(res: Result) -> tuple[Path, Path | None]:
+    """Fiche JSON et vignette à côté du clip : la galerie se construit à partir d'elles."""
+    thumb = res.path.with_suffix(".jpg")
+    try:
+        run(["ffmpeg", "-v", "error", "-nostdin", "-y", "-ss", "1.2", "-i", str(res.path), "-frames:v", "1",
+             "-vf", "scale=540:-2", "-q:v", "4", str(thumb)], quiet=True)
+    except Exception:
+        thumb = None
+    card = {
+        "file": res.path.name, "thumb": thumb.name if thumb else "", "title": res.title,
+        "description": res.description, "tags": res.tags, "hook": res.hook, "go": res.go,
+        "problems": res.problems, "notes": res.notes, "credit": res.credit,
+        "source_url": res.source_url, "duration": round(res.duration, 1), "size_mb": round(res.size_mb, 1),
+        "provider": res.provider, "paid": res.paid,
+        "made_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), **res.meta,
+    }
+    side = res.path.with_suffix(".json")
+    side.write_text(json.dumps(card, ensure_ascii=False, indent=1), encoding="utf-8")
+    return side, thumb
 
 
 def deliver_result(res: Result, cfg: dict) -> None:
     d = cfg["delivery"]
+    side, thumb = write_sidecars(res)
     if d.get("release", True):
         res.link = deliver.release_upload(res.path)
+        for extra in (thumb, side):
+            if extra and extra.exists():
+                deliver.release_upload(extra)
     if youtube.enabled(cfg):
         if res.go:
             res.yt = youtube.upload(res.path, title=res.title, description=res.description,
@@ -312,7 +374,7 @@ def run_text(text: str, cfg: dict, streamers: list[dict], base: Path, outdir: Pa
         deliver.step_summary(msg)
         return 1
     results, errors = run_requests(reqs, cfg, streamers, base, outdir)
-    report = deliver.markdown_report(results, errors)
+    report = deliver.markdown_report(results, errors, gallery=True)
     deliver.issue_comment(report)
     deliver.step_summary(report)
     deliver.cleanup_releases(int(cfg["delivery"].get("keep_days", 7)))

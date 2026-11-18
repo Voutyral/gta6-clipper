@@ -20,6 +20,7 @@ permissions:
   contents: write   # lien de téléchargement, fiches et état
   issues: write     # réponse sur la demande
   models: read      # IA gratuite GitHub Models
+  pages: read       # lien vers la galerie si elle est activée
 
 concurrency:
   group: clip-${{ github.event.issue.number || github.run_id }}
@@ -105,3 +106,12 @@ jobs:
       - name: Fermer la demande
         if: success() && github.event_name == 'issues'
         run: gh issue close "$ISSUE_NUMBER" >/dev/null || true
+
+  gallery:
+    needs: clip
+    if: always() && needs.clip.result == 'success'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/gallery.yml

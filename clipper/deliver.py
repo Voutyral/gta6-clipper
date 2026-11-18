@@ -64,14 +64,43 @@ def issue_comment(body: str) -> None:
     run(["gh", "issue", "comment", num, "--body-file", str(tmp)], check=False, quiet=True)
 
 
-def open_issue(title: str, body: str) -> str:
-    """Ouvre une issue (le téléphone reçoit une notification de l'app GitHub)."""
+def open_issue(title: str, body: str, *, label: str = "", close_previous: bool = False) -> str:
+    """Ouvre une issue (le téléphone reçoit une notification de l'app GitHub).
+
+    Avec `close_previous`, les anciennes issues de la même étiquette sont fermées : une seule reste ouverte.
+    """
     if not in_actions():
         return ""
+    if label:
+        run(["gh", "label", "create", label, "--color", "F9D71C", "--force",
+             "--description", "Créée par le clippeur"], check=False, quiet=True)
+        if close_previous:
+            p = run(["gh", "api", f"repos/{os.environ['GITHUB_REPOSITORY']}/issues?state=open&labels={label}&per_page=50",
+                     "--jq", ".[].number"], check=False, quiet=True)
+            for num in (p.stdout or "").split():
+                run(["gh", "issue", "close", num, "--reason", "completed"], check=False, quiet=True)
     tmp = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "issue.md"
     tmp.write_text(body, encoding="utf-8")
-    p = run(["gh", "issue", "create", "--title", title, "--body-file", str(tmp)], check=False, quiet=True)
+    cmd = ["gh", "issue", "create", "--title", title, "--body-file", str(tmp)]
+    if label:
+        cmd += ["--label", label]
+    p = run(cmd, check=False, quiet=True)
     return (p.stdout or "").strip()
+
+
+_PAGES: dict = {}
+
+
+def pages_url() -> str:
+    """Adresse de la galerie si GitHub Pages est activé sur le dépôt, sinon chaîne vide."""
+    if "url" not in _PAGES:
+        url = ""
+        if in_actions():
+            p = run(["gh", "api", f"repos/{os.environ['GITHUB_REPOSITORY']}/pages", "--jq", ".html_url"],
+                    check=False, quiet=True)
+            url = (p.stdout or "").strip() if p.returncode == 0 else ""
+        _PAGES["url"] = url
+    return _PAGES["url"]
 
 
 def step_summary(body: str) -> None:
@@ -87,8 +116,10 @@ def _status(res) -> str:
     return "✅ GO" if res.go else "⚠️ NO-GO"
 
 
-def markdown_report(results: list, errors: list) -> str:
+def markdown_report(results: list, errors: list, gallery: bool = False) -> str:
     out = []
+    if gallery and results and pages_url():
+        out += [f"## ▶️ [Ouvrir la galerie]({pages_url()})", ""]
     for res in results:
         out.append(f"### {_status(res)} · {res.title}")
         out.append(f"- Durée {res.duration:.0f} s, {res.size_mb:.0f} Mo, accroche « {res.hook} »")
@@ -98,6 +129,11 @@ def markdown_report(results: list, errors: list) -> str:
                    f"IA : {res.provider or 'aucune'}")
         if res.link:
             out.append(f"- [Télécharger le clip]({res.link})")
+        m = getattr(res, "meta", {}) or {}
+        if m.get("ai_score") is not None:
+            out.append(f"- Note de l'IA : {m['ai_score']:g}/10" + (f" · {m['what']}" if m.get("what") else ""))
+        if m.get("found_why"):
+            out.append(f"- Trouvé par la chasse : {m['found_why']}")
         if res.yt.get("url"):
             out.append(f"- YouTube ({res.yt.get('privacy', '?')}) : {res.yt['url']}")
         elif res.yt.get("error"):

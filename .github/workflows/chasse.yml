@@ -1,28 +1,41 @@
-name: Radar
+name: Chasseur de clips
 
-# Une fois par jour : meilleurs clips Twitch des streamers de streamers.yaml marqués « auto: true ».
-# Sans streamer marqué, le radar ne fait rien.
+# Trois fois par jour : clips les plus regardés du moment (Twitch, Kick, streamers suivis),
+# montage des meilleurs, galerie mise à jour, et une issue pour te prévenir.
+# Heures UTC : 05:17, 11:17, 17:17 (06:17, 12:17, 18:17 à Paris en hiver).
 on:
   schedule:
-    - cron: "17 4 * * *"   # 04:17 UTC, soit 05:17 à Paris en hiver
+    - cron: "17 5,11,17 * * *"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "À blanc : lister ce qui serait monté, sans rien monter"
+        type: boolean
+        default: false
+      max:
+        description: "Nombre de clips à monter (vide : réglage de config.yaml)"
+        type: string
+        required: false
 
 permissions:
   contents: write
   issues: write
   models: read
+  pages: read
 
 concurrency:
-  group: radar
+  group: chasse
   cancel-in-progress: false
 
 jobs:
-  radar:
+  hunt:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+      MAX_CLIPS: ${{ github.event.inputs.max }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       YTDLP_PROXY: ${{ secrets.YTDLP_PROXY }}
@@ -32,28 +45,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Y a-t-il des streamers à suivre ?
-        id: check
-        run: |
-          if grep -Eq '^[[:space:]]+auto:[[:space:]]*true' streamers.yaml; then
-            echo "go=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Aucun streamer avec auto: true. Rien à faire." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
       - uses: actions/setup-python@v5
-        if: steps.check.outputs.go == 'true'
         with:
           python-version: "3.12"
           cache: pip
 
       - uses: denoland/setup-deno@v2
-        if: steps.check.outputs.go == 'true'
         with:
           deno-version: v2.x
 
       - name: Outils et dépendances
-        if: steps.check.outputs.go == 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends ffmpeg
@@ -61,24 +62,35 @@ jobs:
           pip install -q -U "yt-dlp[default,curl-cffi]"
 
       - name: Cache du modèle de sous-titres
-        if: steps.check.outputs.go == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
           key: whisper-v1
 
-      - name: Radar
-        if: steps.check.outputs.go == 'true'
-        run: python -m clipper radar --out out
+      - name: Chasse
+        run: |
+          args=(--out out)
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          if [[ "$MAX_CLIPS" =~ ^[0-9]+$ ]]; then args+=(--max "$MAX_CLIPS"); fi
+          python -m clipper hunt "${args[@]}"
 
-      - name: Enregistrer l'état
-        if: always() && steps.check.outputs.go == 'true'
+      - name: Enregistrer les clips déjà vus
+        if: always()
         run: |
           git config user.name "clipper-bot"
           git config user.email "clipper-bot@users.noreply.github.com"
           git add -A state || true
           if ! git diff --cached --quiet; then
-            git commit -q -m "État du radar"
+            git commit -q -m "Chasse : clips vus"
             git pull -q --rebase
             git push -q
           fi
+
+  gallery:
+    needs: hunt
+    if: always() && needs.hunt.result == 'success' && github.event.inputs.dry_run != 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/gallery.yml

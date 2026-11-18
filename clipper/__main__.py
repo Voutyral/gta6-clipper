@@ -3,7 +3,8 @@
     python -m clipper run                    # lit la demande dans la variable REQUEST_TEXT
     python -m clipper run --request "LIEN 12:30-13:10 @streamer"
     python -m clipper local video.mp4 --options "0:40-1:10 @streamer #crop"
-    python -m clipper radar [--dry-run]
+    python -m clipper hunt [--dry-run] [--max 3]   # chasse aux clips du moment
+    python -m clipper gallery --out site           # page de la galerie
     python -m clipper doctor --request "LIEN"   # bilan de santé
 """
 from __future__ import annotations
@@ -26,11 +27,14 @@ def main(argv: list[str] | None = None) -> int:
     p_local = sub.add_parser("local", help="traite un fichier déjà présent sur la machine")
     p_local.add_argument("file")
     p_local.add_argument("--options", default="", help='ex. "0:40-1:10 @streamer #crop x2"')
-    p_radar = sub.add_parser("radar", help="clips du jour des streamers autorisés")
+    p_radar = sub.add_parser("hunt", aliases=["radar"], help="chasse : trouve, monte et range les clips du moment")
     p_radar.add_argument("--dry-run", action="store_true")
+    p_radar.add_argument("--max", type=int, default=None)
+    p_gal = sub.add_parser("gallery", help="construit la page de la galerie")
+    p_gal.add_argument("--from-dir", default=None, help="fiches locales au lieu des releases (essais)")
     p_doc = sub.add_parser("doctor", help="bilan de santé : clés, services, liens")
     p_doc.add_argument("--request", default=None)
-    for p in (p_run, p_local, p_radar, p_doc):
+    for p in (p_run, p_local, p_radar, p_doc, p_gal):
         p.add_argument("--out", default="out")
         p.add_argument("--work", default=None)
     args = ap.parse_args(argv)
@@ -67,9 +71,14 @@ def main(argv: list[str] | None = None) -> int:
             log(f"ÉCHEC {url} : {message} {hint}")
         return 0 if results else 1
 
-    if args.cmd == "radar":
-        from .radar import run_radar
-        return run_radar(cfg, streamers, base, outdir, dry_run=args.dry_run)
+    if args.cmd in ("hunt", "radar"):
+        from .hunt import run_hunt
+        return run_hunt(cfg, streamers, base, outdir, dry_run=args.dry_run, max_clips=args.max)
+
+    if args.cmd == "gallery":
+        from .gallery import build
+        build(outdir, cfg, Path(args.from_dir).resolve() if args.from_dir else None)
+        return 0
 
     if args.cmd == "doctor":
         from .doctor import run_doctor

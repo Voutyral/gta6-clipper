@@ -37,6 +37,11 @@ class ClipRequest:
     lang: str | None = None
     flags: set[str] = field(default_factory=set)
     raw: str = ""
+    # Remplis par le chasseur :
+    game_hint: str = ""                 # jeu de la catégorie d'origine
+    min_score: float | None = None      # note IA minimale pour monter le clip
+    langs: list[str] | None = None      # langues acceptées, vérifiées à la transcription
+    meta: dict = field(default_factory=dict)   # infos connues de la source (titre, streamer, vues)
 
 
 def to_seconds(text: str) -> float:

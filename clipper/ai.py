@@ -275,7 +275,7 @@ def ask(cfg: dict, system: str, text: str, *, video: Path | None = None,
     return None, ""
 
 
-EVAL_SYSTEM = """Tu es monteur de Shorts gaming ({game}). On te donne UN extrait candidat tiré d'un stream ou d'une vidéo : la vidéo ou une planche d'images, plus la transcription horodatée (secondes depuis le début de l'extrait). Évalue son potentiel en Short vertical et prépare son habillage.
+EVAL_SYSTEM = """Tu es monteur de Shorts gaming. Jeu attendu : {game} ; si l'image montre un autre jeu, emploie son vrai nom. On te donne UN extrait candidat tiré d'un stream ou d'une vidéo : la vidéo ou une planche d'images, plus la transcription horodatée (secondes depuis le début de l'extrait). Évalue son potentiel en Short vertical et prépare son habillage.
 
 Réponds uniquement par un objet JSON avec ces clés :
 - "score" : entier de 0 à 10 (10 = moment très fort, compréhensible sans contexte)
@@ -286,15 +286,17 @@ Réponds uniquement par un objet JSON avec ces clés :
 - "title" : titre de 70 caractères maximum
 - "description" : une ou deux phrases naturelles, sans hashtag
 - "tags" : 6 à 10 mots-clés sans #
+- "facecam" : position de la webcam du streamer incrustée dans l'image, au format [ymin, xmin, ymax, xmax] normalisé de 0 à 1000, ou null s'il n'y en a pas
 - "risks" : liste, vide ou parmi "cinematique" (cinématique du jeu montrée seule), "spoiler" (fin du jeu ou révélation majeure de l'histoire), "violence_debut" (violence graphique dans les 7 premières secondes), "musique" (musique sous licence très présente, par exemple la radio du jeu)
 
 Règles : écris en {lang}. N'invente aucun fait absent de l'extrait. Pas de titre mensonger. Aucun spoiler dans le titre ni dans l'accroche."""
 
 
 def evaluate(cfg: dict, *, text: str, dur: float, peak: float | None, title: str, credit: str,
-             lang: str, video: Path | None = None, sheet: bytes | None = None) -> tuple[dict | None, str]:
+             lang: str, video: Path | None = None, sheet: bytes | None = None,
+             game: str = "") -> tuple[dict | None, str]:
     det = cfg["detection"]
-    system = EVAL_SYSTEM.format(game=cfg["metadata"]["game"], min_s=det["clip_min_s"],
+    system = EVAL_SYSTEM.format(game=game or cfg["metadata"]["game"], min_s=det["clip_min_s"],
                                 max_s=det["clip_max_s"], lang=lang)
     user = (f"Source : « {title or 'inconnue'} ». Chaîne : {credit or 'inconnue'}.\n"
             f"Durée de l'extrait : {dur:.1f} s."
@@ -306,7 +308,8 @@ def evaluate(cfg: dict, *, text: str, dur: float, peak: float | None, title: str
         log(f"IA « {name} » : réponse illisible, ignorée : {answer[:400]!r}")
     if data is not None:
         log(f"IA « {name} » : score {data.get('score')}, accroche « {data.get('hook')} », "
-            f"coupe {data.get('start')} → {data.get('end')} s, risques {data.get('risks')}")
+            f"coupe {data.get('start')} → {data.get('end')} s, risques {data.get('risks')}, "
+            f"webcam {data.get('facecam')}")
     return data, (name if data is not None else "")
 
 

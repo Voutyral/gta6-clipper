@@ -1,15 +1,22 @@
 # Clippeur GTA 6
 
-Tu colles un lien depuis ton téléphone, tu reçois un Short 9:16 monté, avec son titre et sa description.
-Le calcul se fait sur les serveurs gratuits de GitHub : aucun ordinateur à laisser allumé.
+Deux façons de l'utiliser, toutes deux depuis le téléphone :
 
-## Le circuit
+* **Automatique** : trois fois par jour, le chasseur va chercher les clips GTA les plus regardés du moment sur Twitch et Kick, garde les meilleurs, les monte et les range dans ta galerie. Tu n'as plus qu'à appuyer sur **Partager**.
+* **À la demande** : tu colles un lien dans une issue, tu reçois le Short monté.
 
-1. Tu ouvres une issue GitHub dont le titre contient le lien (app GitHub, 10 secondes).
-2. GitHub ne télécharge que le passage utile, repère les moments forts et monte le clip.
-3. Un contrôle GO / NO-GO ouvre le fichier fini et vérifie format, son, poids et risques.
-4. Le programme répond dans l'issue : lien de téléchargement, titre et description à copier. L'app GitHub t'envoie une notification.
-5. Tu publies sur YouTube, TikTok et Instagram. L'envoi automatique sur YouTube existe en option.
+Le calcul se fait sur les serveurs de GitHub : aucun ordinateur à laisser allumé.
+
+## Le circuit automatique
+
+1. **Chasse** (05:17, 11:17 et 17:17 UTC) : clips des dernières 24 h dans les catégories GTA VI et GTA V, en français par défaut, plus les streamers de `streamers.yaml`.
+2. **Tri** par vitesse de vues : un clip récent qui décolle passe devant un vieux clip à succès. Un même streamer est pris deux fois par jour au plus.
+3. **Montage** des meilleurs. Gemini regarde chaque clip, le note sur 10 et écarte ceux sous 6. Il écrit accroche et titre, repère la webcam du streamer (caméra en haut, jeu en bas) et signale cinématiques et spoilers.
+4. **Contrôle GO / NO-GO** du fichier fini. Seuls les GO sont livrés.
+5. **Galerie** mise à jour et une issue « 🎬 clips prêts à poster » : l'app GitHub t'envoie une notification.
+6. **Toi** : dans la galerie, **Préparer la vidéo**, puis **Partager**, puis TikTok, YouTube ou Instagram. Les boutons **Titre** et **Légende** copient le texte à coller. **Posté ?** range le clip.
+
+Pour lancer une chasse sans attendre : **Actions**, **Chasseur de clips**, **Run workflow**. Coche « À blanc » pour voir seulement ce qui serait monté.
 
 ## Mise en route (3 minutes, tout au téléphone)
 
@@ -21,11 +28,24 @@ Le calcul se fait sur les serveurs gratuits de GitHub : aucun ordinateur à lais
 
 Avec cette clé, Gemini voit l'image et entend le son de chaque passage : il choisit le meilleur, resserre la coupe, écrit accroche et titre, et signale cinématiques, spoilers et violence en ouverture. Sans elle, le programme applique des règles simples : moments forts repérés au son, accroche tirée d'une liste. L'IA gratuite de GitHub ne répondait pas sur ce dépôt lors des essais ; le programme la réessaie à chaque lancement et s'en passe si elle reste fermée.
 
-### 2. Notifications
+### 2. Galerie (pour poster en deux appuis)
+
+La galerie est une page web hébergée par GitHub Pages. Sur un compte GitHub gratuit, Pages n'existe que pour les dépôts publics.
+
+1. Ton dépôt, **Settings**, **General**, tout en bas **Change visibility**, **Make public**.
+2. **Settings**, **Pages**, **Source** : **GitHub Actions**.
+3. Lance **Actions**, **Galerie**, **Run workflow**. L'adresse est `https://voutyral.github.io/gta6-clipper/`.
+4. Dans Safari, **Partager**, puis **Sur l'écran d'accueil** : la galerie s'ouvre comme une app.
+
+Ce que « public » change : le code, les issues et les clips deviennent visibles par qui trouve l'adresse. Tes clés restent secrètes. En échange, les minutes de calcul GitHub deviennent illimitées.
+
+Sans galerie, tout marche quand même : chaque issue contient les liens de téléchargement.
+
+### 3. Notifications
 
 Dans l'app GitHub, active les notifications. Chaque clip fini arrive comme un commentaire sur ta demande.
 
-### 3. Premier essai
+### 4. Premier essai
 
 Ouvre une issue avec pour titre un lien de clip Twitch. Un 👀 apparaît quand le travail démarre. Compte 4 à 8 minutes.
 
@@ -65,11 +85,11 @@ Issue : `apprends https://youtu.be/XXXX comment il rythme ses clips`
 
 Avec la clé Gemini, un lien YouTube public est lu directement chez Google (image et son), sans téléchargement. Les autres liens sont téléchargés en petite qualité puis analysés. La fiche est rangée dans `knowledge/` et postée dans l'issue. Ces fiches sont la matière première des skills : donne-les à Claude pour qu'il en fasse un skill ou qu'il ajuste `config.yaml`.
 
-## Streamers autorisés et radar
+## Streamers suivis
 
-`streamers.yaml` liste les streamers que tu as le droit de clipper : campagne rejointe ou accord écrit. Pour chacun : crédit, position de sa caméra, campagne rémunérée ou non.
+`streamers.yaml` liste les streamers dont tu as rejoint la campagne ou obtenu l'accord. Le chasseur suit leurs clips même hors des catégories GTA, leur donne la priorité, utilise leur crédit et la position de leur caméra, et rappelle la mention « promotion payante » si la campagne est rémunérée.
 
-Avec `auto: true`, le radar récupère chaque matin ses clips Twitch les plus vus des dernières 24 heures, les monte et ouvre une issue « Radar du jour » avec les liens. Un clip d'une source absente de la liste est monté quand même, mais marqué « accord à vérifier ».
+Les autres clips trouvés par la chasse sont montés avec la mention « accord à vérifier ». Pour ne garder que les streamers de la liste : `allowlist_only: true` dans `config.yaml`.
 
 ## Options avancées
 
@@ -112,6 +132,8 @@ Reste à valider avec tes clés et tes liens : Gemini, l'envoi YouTube, et les s
 
 ## Dépannage
 
+* **La chasse ne trouve rien** : regarde le résumé du lancement (onglet **Actions**). Les sources illisibles y sont listées. Les clips déjà vus ne reviennent jamais.
+* **Trop peu de clips** : baisse `min_ai_score` ou `min_views`, ou ajoute `en` aux langues dans `config.yaml`.
 * **Tout vérifier d'un coup** : onglet **Actions**, **Diagnostic**, **Run workflow**. Le bilan dit si Gemini et l'envoi YouTube répondent, et teste les liens que tu lui donnes.
 
 * **Rien ne se passe** : l'issue doit être ouverte par le propriétaire du dépôt. Regarde l'onglet **Actions**.

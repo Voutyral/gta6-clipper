@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0b12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Clips">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Clips prêts à poster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  @font-face { font-family: "Anton"; src: url("fonts/Anton-Regular.ttf") format("truetype"); font-display: swap; }
+  @font-face { font-family: "Poppins XB"; src: url("fonts/Poppins-ExtraBold.ttf") format("truetype"); font-display: swap; }
+
+  :root {
+    --ink: #0d0b12;
+    --ink-2: #16131d;
+    --paper: #f3ede2;
+    --paper-dim: #d9d1c3;
+    --text-on-paper: #1a1620;
+    --muted: #8a8296;
+    --sun-1: #ff4f7b;
+    --sun-2: #ff8a3d;
+    --sun-3: #ffd23f;
+    --sea: #19d3c5;
+    --hook: #ffe600;
+    --danger: #ff5a4e;
+    --radius: 18px;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --body: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+    --display: "Anton", "Impact", "Arial Narrow", sans-serif;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--ink); color: var(--paper); }
+  body {
+    font-family: var(--body);
+    min-height: 100vh;
+    background:
+      radial-gradient(120% 60% at 110% -10%, rgba(255, 79, 123, .28), transparent 60%),
+      radial-gradient(90% 50% at -20% 10%, rgba(25, 211, 197, .16), transparent 60%),
+      var(--ink);
+    background-attachment: fixed;
+  }
+  /* Grain léger pour donner de la matière au fond. */
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .07;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  header {
+    position: sticky; top: 0; z-index: 10;
+    padding: calc(var(--safe-top) + 14px) 18px 12px;
+    background: linear-gradient(to bottom, rgba(13, 11, 18, .96) 70%, rgba(13, 11, 18, 0));
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .band { height: 5px; border-radius: 3px; margin-bottom: 14px;
+    background: linear-gradient(90deg, var(--sun-1), var(--sun-2) 45%, var(--sun-3) 70%, var(--sea)); }
+  .brand { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  h1 { font-family: var(--display); font-weight: 400; font-size: 44px; line-height: .9; margin: 0;
+    letter-spacing: .5px; text-transform: uppercase; }
+  h1 em { font-style: normal; color: var(--hook); }
+  .stamp { font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: right; line-height: 1.35; }
+
+  .tabs { display: flex; gap: 8px; margin-top: 14px; }
+  .tab { flex: 1; font-family: var(--mono); font-size: 13px; font-weight: 600; letter-spacing: .3px;
+    padding: 10px 8px; border-radius: 999px; border: 1.5px solid #2c2736; background: transparent;
+    color: var(--paper-dim); }
+  .tab[aria-pressed="true"] { background: var(--paper); color: var(--text-on-paper); border-color: var(--paper); }
+  .tab b { font-weight: 600; opacity: .65; }
+
+  main { position: relative; z-index: 1; padding: 6px 14px calc(var(--safe-bottom) + 90px);
+    max-width: 560px; margin: 0 auto; }
+
+  /* ---------- Ticket ---------- */
+  .ticket { margin: 18px 0 30px; opacity: 0; transform: translateY(14px) rotate(-.4deg);
+    animation: drop .5s cubic-bezier(.2, .8, .2, 1) forwards; }
+  .ticket:nth-child(2n) { transform: translateY(14px) rotate(.4deg); }
+  @keyframes drop { to { opacity: 1; transform: none; } }
+  .ticket.posted { filter: saturate(.25) brightness(.8); }
+
+  .screen { position: relative; border-radius: var(--radius) var(--radius) 0 0; overflow: hidden;
+    background: #000; aspect-ratio: 9 / 16; max-height: 72vh; margin: 0 auto;
+    box-shadow: 0 30px 60px -30px rgba(255, 79, 123, .45); }
+  .screen video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .score { position: absolute; top: 12px; right: 12px; font-family: var(--display); font-size: 26px;
+    line-height: 1; color: var(--ink); background: var(--hook); padding: 6px 9px 4px; border-radius: 6px;
+    transform: rotate(4deg); box-shadow: 0 6px 0 rgba(0, 0, 0, .35); }
+  .score small { font-size: 13px; }
+  .postedmark { position: absolute; inset: 0; display: none; place-items: center; pointer-events: none; }
+  .posted .postedmark { display: grid; }
+  .postedmark span { font-family: var(--display); font-size: 64px; color: var(--sea); border: 6px solid var(--sea);
+    padding: 4px 18px 0; transform: rotate(-12deg); letter-spacing: 2px; background: rgba(13, 11, 18, .55); }
+
+  .paper { position: relative; background: var(--paper); color: var(--text-on-paper);
+    border-radius: 0 0 var(--radius) var(--radius); padding: 22px 18px 18px; }
+  /* Bord perforé entre l'écran et le ticket. */
+  .paper::before { content: ""; position: absolute; left: 0; right: 0; top: -7px; height: 14px;
+    background: radial-gradient(circle at 7px 7px, var(--ink) 5px, transparent 5.5px) 0 0 / 18px 14px repeat-x; }
+
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 10px; font-family: var(--mono); font-size: 11.5px;
+    color: #5d5566; text-transform: uppercase; letter-spacing: .4px; }
+  .meta .plat { color: #fff; background: #6441a5; padding: 1px 7px; border-radius: 4px; }
+  .meta .plat.kick { background: #2b8a1f; }
+  .title { font-family: var(--display); font-weight: 400; font-size: 30px; line-height: 1.02; margin: 10px 0 6px;
+    text-transform: uppercase; word-break: break-word; }
+  .what { font-size: 15px; line-height: 1.35; margin: 0 0 12px; color: #3d3645; }
+  .credit { font-family: var(--mono); font-size: 12.5px; }
+  .credit a { color: inherit; }
+  .warn { margin: 10px 0 0; padding: 8px 10px; border: 1.5px dashed #c45a2c; border-radius: 8px;
+    font-size: 13.5px; color: #8a3410; background: rgba(255, 138, 61, .1); }
+
+  .actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 16px; }
+  .btn { font-family: var(--mono); font-weight: 600; font-size: 13px; letter-spacing: .2px;
+    border: 2px solid var(--text-on-paper); background: transparent; color: var(--text-on-paper);
+    border-radius: 12px; padding: 12px 6px; min-height: 48px; cursor: pointer; }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { grid-column: 1 / -1; font-family: var(--display); font-weight: 400; font-size: 24px;
+    letter-spacing: 1px; text-transform: uppercase; border: none; color: var(--ink); min-height: 60px;
+    background: linear-gradient(100deg, var(--sun-1), var(--sun-2) 60%, var(--sun-3));
+    position: relative; overflow: hidden; }
+  .btn.primary .bar { position: absolute; left: 0; bottom: 0; height: 5px; width: 0; background: var(--ink);
+    transition: width .2s; }
+  .btn.primary.ready { background: var(--sea); }
+  .btn.ghost { border-style: dashed; }
+  .btn.on { background: var(--text-on-paper); color: var(--paper); }
+
+  .empty { text-align: center; margin: 70px 8px; font-family: var(--mono); color: var(--muted); line-height: 1.6; }
+  .empty strong { display: block; font-family: var(--display); font-weight: 400; font-size: 34px;
+    color: var(--paper); letter-spacing: .5px; margin-bottom: 8px; text-transform: uppercase; }
+
+  .toast { position: fixed; left: 50%; bottom: calc(var(--safe-bottom) + 24px); z-index: 20;
+    transform: translate(-50%, calc(100% + 60px)); transition: transform .25s cubic-bezier(.2, .8, .2, 1);
+    background: var(--paper); color: var(--text-on-paper); font-family: var(--mono); font-weight: 600;
+    font-size: 13px; padding: 12px 16px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+    max-width: 92vw; }
+  .toast.show { transform: translate(-50%, 0); }
+
+  @media (prefers-reduced-motion: reduce) { .ticket { animation: none; opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="band"></div>
+  <div class="brand">
+    <h1>Clips <em>prêts</em></h1>
+    <div class="stamp" id="stamp">chargement…</div>
+  </div>
+  <div class="tabs" role="group" aria-label="Filtre">
+    <button class="tab" id="tab-todo" aria-pressed="true">À poster <b id="n-todo">0</b></button>
+    <button class="tab" id="tab-done" aria-pressed="false">Postés <b id="n-done">0</b></button>
+  </div>
+</header>
+<main id="list" aria-live="polite"></main>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const STORE = "clips-postes-v1";
+  const list = document.getElementById("list");
+  const toastEl = document.getElementById("toast");
+  let clips = [], view = "todo", data = {};
+
+  // Mémoire « posté » propre à ce téléphone. Peut être indisponible (navigation privée) : on s'en passe.
+  const memory = (() => {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; } catch (e) { saved = {}; }
+    return {
+      has: (k) => !!saved[k],
+      toggle(k) {
+        if (saved[k]) delete saved[k]; else saved[k] = Date.now();
+        try { localStorage.setItem(STORE, JSON.stringify(saved)); } catch (e) {}
+        return !!saved[k];
+      },
+    };
+  })();
+
+  let toastTimer;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2200);
+  }
+
+  async function copy(text, label) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } catch (err) {}
+      ta.remove();
+    }
+    toast(label + " copié");
+  }
+
+  function ago(iso) {
+    const t = Date.parse(iso);
+    if (!t) return "";
+    const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+    if (m < 60) return `il y a ${m} min`;
+    const h = Math.round(m / 60);
+    return h < 48 ? `il y a ${h} h` : `il y a ${Math.round(h / 24)} j`;
+  }
+
+  function nextRun(schedule) {
+    if (!schedule || !schedule.length) return "";
+    const now = new Date();
+    const times = [];
+    for (const day of [0, 1]) {
+      for (const hm of schedule) {
+        const [h, m] = hm.split(":").map(Number);
+        const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + day, h, m));
+        if (d > now) times.push(d);
+      }
+    }
+    times.sort((a, b) => a - b);
+    return times.length ? times[0].toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "";
+  }
+
+  function el(tag, attrs = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "class") n.className = v;
+      else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+      else if (v !== undefined && v !== null && v !== false) n.setAttribute(k, v);
+    }
+    for (const k of kids) if (k !== null && k !== undefined) n.append(k);
+    return n;
+  }
+
+  // Partage : la vidéo est d'abord chargée dans le téléphone (iOS exige un appui juste avant le partage).
+  function shareButton(c) {
+    let file = null;
+    const bar = el("span", { class: "bar" });
+    const label = el("span", {}, "Préparer la vidéo");
+    const btn = el("button", { class: "btn primary", type: "button" }, label, bar);
+    btn.addEventListener("click", async () => {
+      if (file) {
+        const payload = { files: [file], title: c.title };
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try { await navigator.share(payload); } catch (e) { if (e.name !== "AbortError") toast("Partage impossible : " + e.name); }
+        } else {
+          const a = el("a", { href: c.src, download: c.file });
+          document.body.appendChild(a); a.click(); a.remove();
+          toast("Téléchargement lancé");
+        }
+        return;
+      }
+      btn.disabled = true;
+      try {
+        const res = await fetch(c.src);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const total = Number(res.headers.get("content-length")) || 0;
+        const reader = res.body.getReader();
+        const parts = []; let got = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          parts.push(value); got += value.length;
+          if (total) { const p = Math.round(got / total * 100); bar.style.width = p + "%"; label.textContent = `Chargement ${p} %`; }
+          else label.textContent = `Chargement ${(got / 1e6).toFixed(1)} Mo`;
+        }
+        file = new File([new Blob(parts, { type: "video/mp4" })], c.file, { type: "video/mp4" });
+        btn.classList.add("ready"); bar.style.width = "0";
+        label.textContent = "Partager ↗";
+      } catch (e) {
+        label.textContent = "Réessayer";
+        toast("Chargement impossible : " + e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    return btn;
+  }
+
+  function ticket(c, i) {
+    const posted = memory.has(c.file);
+    const caption = [c.title, (c.description || "").split("\n").filter((l) => l.startsWith("#")).join(" ")]
+      .filter(Boolean).join("\n\n");
+    const card = el("article", { class: "ticket" + (posted ? " posted" : ""), style: `animation-delay:${Math.min(i, 6) * 70}ms` });
+    const video = el("video", { src: c.src, poster: c.poster || undefined, controls: "", playsinline: "", preload: "none" });
+    const screen = el("div", { class: "screen" }, video,
+      c.ai_score != null ? el("div", { class: "score", title: "Note de l'IA" }, String(c.ai_score), el("small", {}, "/10")) : null,
+      el("div", { class: "postedmark" }, el("span", {}, "POSTÉ")));
+    const plat = (c.platform || "").toLowerCase();
+    const meta = el("div", { class: "meta" },
+      plat ? el("span", { class: "plat " + plat }, plat) : null,
+      c.views != null ? el("span", {}, `${Number(c.views).toLocaleString("fr-FR")} vues`) : null,
+      el("span", {}, `${Math.round(c.duration || 0)} s`),
+      el("span", {}, ago(c.made_at)));
+    const credit = el("div", { class: "credit" }, "Source : ",
+      c.source_url ? el("a", { href: c.source_url, target: "_blank", rel: "noopener" }, c.credit || "lien") : (c.credit || "?"));
+    const warns = (c.notes || []).filter((n) => !/aucune parole/.test(n));
+    const doneBtn = el("button", { class: "btn ghost" + (posted ? " on" : ""), type: "button" }, posted ? "✓ Posté" : "Posté ?");
+    doneBtn.addEventListener("click", () => {
+      const on = memory.toggle(c.file);
+      card.classList.toggle("posted", on);
+      doneBtn.classList.toggle("on", on);
+      doneBtn.textContent = on ? "✓ Posté" : "Posté ?";
+      count();
+      toast(on ? "Rangé dans « Postés »" : "Remis dans « À poster »");
+      if ((view === "todo" && on) || (view === "done" && !on)) setTimeout(render, 450);
+    });
+    const paper = el("div", { class: "paper" }, meta,
+      el("h2", { class: "title" }, c.title || "Sans titre"),
+      c.what ? el("p", { class: "what" }, c.what) : null,
+      credit,
+      ...warns.map((w) => el("div", { class: "warn" }, "⚠ " + w)),
+      c.paid ? el("div", { class: "warn" }, "💶 Campagne rémunérée : coche « promotion payante » en publiant.") : null,
+      el("div", { class: "actions" },
+        shareButton(c),
+        el("button", { class: "btn", type: "button", onclick: () => copy(c.title || "", "Titre") }, "Titre"),
+        el("button", { class: "btn", type: "button", onclick: () => copy(caption, "Légende") }, "Légende"),
+        doneBtn));
+    card.append(screen, paper);
+    return card;
+  }
+
+  function count() {
+    const done = clips.filter((c) => memory.has(c.file)).length;
+    document.getElementById("n-todo").textContent = clips.length - done;
+    document.getElementById("n-done").textContent = done;
+  }
+
+  function render() {
+    list.replaceChildren();
+    const shown = clips.filter((c) => (view === "done") === memory.has(c.file));
+    count();
+    if (!shown.length) {
+      const next = nextRun(data.schedule_utc);
+      list.append(el("div", { class: "empty" },
+        el("strong", {}, view === "done" ? "Rien de posté" : "Tout est posté"),
+        view === "done" ? "Les clips marqués « posté » arrivent ici." :
+          (next ? `Prochaine chasse vers ${next}.` : "La prochaine chasse remplira la liste.")));
+      return;
+    }
+    shown.forEach((c, i) => list.append(ticket(c, i)));
+  }
+
+  for (const [id, v] of [["tab-todo", "todo"], ["tab-done", "done"]]) {
+    document.getElementById(id).addEventListener("click", () => {
+      view = v;
+      document.getElementById("tab-todo").setAttribute("aria-pressed", v === "todo");
+      document.getElementById("tab-done").setAttribute("aria-pressed", v === "done");
+      render();
+    });
+  }
+
+  fetch("clips.json", { cache: "no-store" })
+    .then((r) => r.json())
+    .then((d) => {
+      data = d || {};
+      clips = data.clips || [];
+      const next = nextRun(data.schedule_utc);
+      document.getElementById("stamp").innerHTML = "";
+      document.getElementById("stamp").append(
+        "à jour " + (ago(data.generated_at) || "?"), document.createElement("br"),
+        next ? "prochaine chasse " + next : "");
+      render();
+    })
+    .catch(() => {
+      document.getElementById("stamp").textContent = "hors ligne";
+      list.append(el("div", { class: "empty" }, el("strong", {}, "Liste illisible"), "Recharge la page."));
+    });
+})();
+</script>
+</body>
+</html>
