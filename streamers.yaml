@@ -1,4 +1,4 @@
-# Streamers que tu as le droit de clipper : campagne rejointe (Whop, Discord du streamer) ou accord écrit.
+# Streamers que tu as le droit de clipper : campagne rejointe (Content Rewards, Discord du streamer) ou accord écrit.
 # Le radar automatique ne touche qu'à cette liste. Un clip d'une source absente d'ici
 # est quand même monté, mais marqué « accord à vérifier ».
 #
@@ -6,13 +6,52 @@
 #
 # streamers:
 #   - name: ExempleStreamer
-#     twitch: exemplestreamer          # pseudo Twitch, sert au radar
+#     twitch: exemplestreamer          # pseudo Twitch, sert au radar (ou kick: pseudo Kick)
 #     credit: "@exemplestreamer"       # affiché sur le clip et dans la description
 #     auto: true                       # true : le radar prend ses meilleurs clips chaque jour
 #     paid: true                       # campagne rémunérée : pense à « promotion payante » en publiant
-#     campaign: "https://whop.com/..." # pour mémoire
 #     min_views: 500
 #     layout: split                    # caméra en haut, jeu en bas
 #     facecam: {x: 0.0, y: 0.72, w: 0.24, h: 0.28}   # position de sa caméra, en fractions de l'image
+#
+# Une campagne s'ajoute avec un bloc `campaign:` (voir Dasgas Dom ci-dessous) : la chasse ne prend
+# alors que la source autorisée, avant tout le reste, et le montage suit le brief.
 
-streamers: []
+streamers:
+  - name: Dasgas Dom
+    kick: dasgasd3m                    # chaîne Kick suivie par la chasse
+    credit: "kick.com/dasgasd3m"       # crédit écrit en bas du clip
+    credit_prefix: "Dasgas Dom ·"      # → « Dasgas Dom · kick.com/dasgasd3m »
+    language: en                       # Dom parle anglais : sous-titres, accroche, titre et légende en anglais
+    auto: true
+    paid: true
+    min_views: 1                       # tous les clips de son stream comptent, les plus vus d'abord
+    max_per_day: 12                    # pas de limite à 2 clips par jour pour lui
+    story_ok: true                     # moments d'histoire voulus : alerte spoiler, rien de dévoilé
+    music: off                         # la campagne veut un son clair : pas de musique ajoutée
+    hashtags: ["#ad", "#dasgasdom3", "#GTA6", "#GTAVI"]
+    caption_lines:                     # ajouté à la légende : crédit et lien exigés par la campagne
+      - "🎥 Dasgas Dom live on Kick: kick.com/dasgasd3m"
+    fallback_hooks: ["DASGAS DOM IN GTA 6", "WAIT FOR IT", "DOM WAS NOT READY"]
+    campaign:
+      name: "Dom GTA 6 (RUCKUS)"
+      platforms: [TikTok, YouTube Shorts]          # Instagram ne compte pas pour cette campagne
+      opens: "2026-11-19T09:00:00-08:00"           # publier et soumettre seulement après (minuit au Laos)
+      closes: "2026-12-19T23:59:00-08:00"          # date limite de soumission
+      footage_from: "2026-11-19T00:00:00-05:00"    # seul le stream GTA 6 du 19 novembre est autorisé
+      footage_until: "2026-11-20T00:00:00-08:00"
+      same_stream: true                            # un live commencé le 19 reste valable après minuit
+      games: ["Grand Theft Auto VI"]
+      submit_minutes: 30                           # lien soumis moins de 30 min après la publication
+      brief: |
+        Streamer: Dasgas Dom (Kick: dasgasd3m), American, speaks English, makes adult jokes.
+        Clip funny, emotional and unexpected GTA 6 moments from his live stream: his reaction to a
+        fictional character's death or a major story moment, a glitch that really happens, funny
+        comments, crashes or failed missions, unexpected NPC interactions, real chat exchanges.
+        Keep the setup, his reaction and the payoff. His face (webcam) or his voice must stay in the edit.
+        Title: start with "Dasgas Dom" and use the campaign formats only when the footage really shows it:
+        "Dasgas Dom finds a GTA 6 glitch", "Dasgas Dom fails [mission]", "Dasgas Dom reacts to [moment]".
+        For a story moment, never name who dies or what happens (e.g. "Dasgas Dom reacts to a huge GTA 6 story moment").
+        On-screen hook: 6 words max, same spirit (e.g. "DOM FINDS A GTA 6 GLITCH").
+        Keep his meaning intact. Never invent a reaction, a chat message or gameplay.
+        Platform-appropriate moments only: skip explicit material.

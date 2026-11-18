@@ -77,6 +77,7 @@ DEFAULTS: dict = {
         "enabled": True,
         "period": "24hr",
         "max_per_run": 3,
+        "campaign_max_per_run": 5,
         "max_candidates": 6,
         "min_ai_score": 6,
         "game_boost": {"Grand Theft Auto VI": 3},

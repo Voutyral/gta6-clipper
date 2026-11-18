@@ -203,7 +203,8 @@ def _render(plan: Plan, out: Path, cfg: dict, workdir: Path, flags: set) -> dict
                     words.append(dict(w, s=ws, e=min(total, max(we, ws + 0.04))))
             before += e0 - s0
         words.sort(key=lambda w: w["s"])
-    credit = f"{ed.get('credit_prefix', 'Clip :')} {plan.credit}".strip() if plan.credit else ""
+    prefix = (plan.preset or {}).get("credit_prefix", ed.get("credit_prefix", "Clip :"))
+    credit = f"{prefix or ''} {plan.credit}".strip() if plan.credit else ""
     ass = captions.build_ass(
         words, hook=plan.hook, context=plan.context, credit=credit, total=total, cfg=cfg,
         hook_until=offset + float(ed.get("hook_seconds", 3.5)),

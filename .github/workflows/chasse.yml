@@ -5,11 +5,14 @@ name: Chasseur de clips
 # Heures UTC : 05:17, 11:17, 17:17 (12:17, 18:17, 00:17 au Laos ; 06:17, 12:17, 18:17 à Paris en hiver).
 # GitHub retarde ou saute parfois un lancement programmé : deux créneaux de secours suivent
 # chaque chasse, et ne font rien si une chasse programmée a réussi dans les 2 h 30 précédentes.
+# Les 19 et 20 novembre (stream GTA 6 de Dasgas Dom, campagne RUCKUS) : un passage toutes les
+# 2 heures en plus, réservé aux streamers en campagne de streamers.yaml.
 on:
   schedule:
     - cron: "17 5,11,17 * * *"
     - cron: "52 5,11,17 * * *"
     - cron: "37 6,12,18 * * *"
+    - cron: "17 1,3,7,9,13,15,19,21,23 19,20 11 *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -20,6 +23,10 @@ on:
         description: "Nombre de clips à monter (vide : réglage de config.yaml)"
         type: string
         required: false
+      campaign_only:
+        description: "Uniquement les streamers en campagne (streamers.yaml)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -40,7 +47,8 @@ jobs:
     steps:
       - name: Une chasse programmée vient-elle de passer ?
         id: recent
-        if: github.event_name == 'schedule'
+        # Seuls les créneaux de secours attendent : les chasses normales et de campagne partent toujours.
+        if: github.event_name == 'schedule' && (github.event.schedule == '52 5,11,17 * * *' || github.event.schedule == '37 6,12,18 * * *')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -56,12 +64,13 @@ jobs:
     needs: gate
     if: needs.gate.outputs.skip != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
       DRY_RUN: ${{ github.event.inputs.dry_run }}
       MAX_CLIPS: ${{ github.event.inputs.max }}
+      CAMPAIGN_ONLY: ${{ github.event.schedule == '17 1,3,7,9,13,15,19,21,23 19,20 11 *' || github.event.inputs.campaign_only == 'true' }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       YTDLP_PROXY: ${{ secrets.YTDLP_PROXY }}
@@ -100,6 +109,7 @@ jobs:
           args=(--out out)
           if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
           if [[ "$MAX_CLIPS" =~ ^[0-9]+$ ]]; then args+=(--max "$MAX_CLIPS"); fi
+          if [ "$CAMPAIGN_ONLY" = "true" ]; then args+=(--campaign-only); fi
           python -m clipper hunt "${args[@]}"
 
       - name: Enregistrer les clips déjà vus

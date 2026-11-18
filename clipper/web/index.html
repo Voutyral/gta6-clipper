@@ -366,9 +366,24 @@
     return btn;
   }
 
+  function campaignNote(c) {
+    const k = c.campaign || {};
+    const where = (k.platforms || []).join(" ou ") || "les plateformes de la campagne";
+    const fmt = (t) => new Date(t).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short",
+                                                          hour: "2-digit", minute: "2-digit" });
+    const opens = Date.parse(k.opens), closes = Date.parse(k.closes);
+    let when = "";
+    if (opens && Date.now() < opens) when = ` Pas avant ${fmt(opens)}.`;
+    else if (closes && Date.now() > closes) when = " Campagne terminée.";
+    else if (closes) when = ` Jusqu'au ${fmt(closes)}.`;
+    return `💶 ${k.name || "Campagne"} : poste sur ${where}, active « contenu commercial », puis soumets `
+      + `le lien sur Content Rewards dans les ${k.submit_minutes || 30} min.${when}`;
+  }
+
   function ticket(c, i) {
     const posted = memory.has(c.file);
-    const caption = [c.title, (c.description || "").split("\n").filter((l) => l.startsWith("#")).join(" ")]
+    // Campagne : légende complète (titre, crédit exigé, hashtags). Sinon titre et hashtags seulement.
+    const caption = c.caption || [c.title, (c.description || "").split("\n").filter((l) => l.startsWith("#")).join(" ")]
       .filter(Boolean).join("\n\n");
     const card = el("article", { class: "ticket" + (posted ? " posted" : ""), style: `animation-delay:${Math.min(i, 6) * 70}ms` });
     const video = el("video", { src: c.src, poster: c.poster || undefined, controls: "", playsinline: "", preload: "none" });
@@ -398,7 +413,8 @@
       c.what ? el("p", { class: "what" }, c.what) : null,
       credit,
       ...warns.map((w) => el("div", { class: "warn" }, "⚠ " + w)),
-      c.paid ? el("div", { class: "warn" }, "💶 Campagne rémunérée : coche « promotion payante » en publiant.") : null,
+      c.campaign ? el("div", { class: "warn" }, campaignNote(c))
+        : c.paid ? el("div", { class: "warn" }, "💶 Campagne rémunérée : coche « promotion payante » en publiant.") : null,
       el("div", { class: "actions" },
         shareButton(c),
         el("button", { class: "btn", type: "button", onclick: () => copy(c.title || "", "Titre") }, "Titre"),

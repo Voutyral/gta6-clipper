@@ -80,6 +80,7 @@ youtube:
 hunt:                               # le chasseur : trouve tout seul les clips du moment
   enabled: true
   max_per_run: 3                    # clips montés par passage (3 passages par jour)
+  campaign_max_per_run: 5           # quand une campagne de streamers.yaml a des clips à monter
   max_candidates: 6                 # clips essayés au maximum par passage
   min_ai_score: 6                   # note minimale de Gemini (sur 10) pour garder un clip
   game_boost:                       # jeux à privilégier : leur score est multiplié

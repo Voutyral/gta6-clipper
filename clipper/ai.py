@@ -313,7 +313,7 @@ Réponds uniquement par un objet JSON avec ces clés :
 - "description" : une ou deux phrases naturelles, sans hashtag
 - "tags" : 6 à 10 mots-clés sans #
 - "facecam" : position de la webcam du streamer incrustée dans l'image, au format [ymin, xmin, ymax, xmax] normalisé de 0 à 1000, ou null s'il n'y en a pas
-- "risks" : liste, vide ou parmi "cinematique" (cinématique du jeu montrée seule), "spoiler" (fin du jeu ou révélation majeure de l'histoire), "violence_debut" (violence graphique dans les 7 premières secondes), "musique" (musique sous licence très présente, par exemple la radio du jeu)
+- "risks" : liste, vide ou parmi "cinematique" (cinématique du jeu montrée seule), "spoiler" (fin du jeu ou révélation majeure de l'histoire), "violence_debut" (violence graphique dans les 7 premières secondes), "musique" (musique sous licence très présente, par exemple la radio du jeu), "explicite" (contenu sexuel explicite, nudité, insultes racistes ou homophobes : interdit sur TikTok et YouTube), "bande_annonce" (bande-annonce, vidéo officielle ou fuite montrée à la place du jeu en direct)
 - "transcript" : ce qui est dit dans TOUT l'extrait, mot pour mot, du début à la fin, sans horodatage, d'après le son. Pars du brouillon fourni et corrige les mots mal entendus, surtout les noms, pseudos, argot et termes de jeu (aide-toi du vocabulaire). Garde l'oral tel qu'il est prononcé : répétitions, hésitations utiles, argot (« wesh », « frérot », « dinguerie »), élisions (« j'suis », « t'as »). Ne résume pas, ne reformule pas, ne traduis pas, n'ajoute rien qu'on n'entend pas. Ponctuation simple. "" si personne ne parle
 - "spoken_lang" : code ISO 639-1 de la langue parlée (fr, en, es…), "" si personne ne parle
 - "cuts" : passages à retirer pour un montage plus nerveux, liste de [début, fin] en secondes dans l'extrait, à l'intérieur de la coupe conseillée : attente, silence où il ne se passe rien, hésitation, répétition, passage qui n'aide pas à comprendre. Ne retire jamais la mise en place nécessaire, l'action principale ni la chute ; coupe entre deux phrases. [] si tout est utile
@@ -324,10 +324,13 @@ Règles : écris en {lang}, sauf "transcript" qui reste dans la langue parlée. 
 
 def evaluate(cfg: dict, *, text: str, dur: float, peak: float | None, title: str, credit: str,
              lang: str, video: Path | None = None, sheet: bytes | None = None,
-             game: str = "", vocab: list[str] | None = None) -> tuple[dict | None, str]:
+             game: str = "", vocab: list[str] | None = None, brief: str = "") -> tuple[dict | None, str]:
     det = cfg["detection"]
     system = EVAL_SYSTEM.format(game=game or cfg["metadata"]["game"], min_s=det["clip_min_s"],
                                 max_s=det["clip_max_s"], lang=lang)
+    if brief:   # campagne rémunérée : ses règles passent avant les habitudes de montage
+        system += ("\n\nCAMPAGNE RÉMUNÉRÉE POUR CETTE SOURCE. Ses règles priment ; un extrait qui ne les "
+                   "respecte pas reçoit une note basse :\n" + brief)
     user = (f"Source : « {title or 'inconnue'} ». Chaîne : {credit or 'inconnue'}.\n"
             f"Durée de l'extrait : {dur:.1f} s."
             + (f" Pic sonore à {peak:.1f} s." if peak is not None else "")

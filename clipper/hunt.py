@@ -14,7 +14,7 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import deliver, fetch
+from . import campaign, deliver, fetch
 from .config import ROOT, match_streamer
 from .pipeline import Result, deliver_result, process_request
 from .request import ClipRequest
@@ -76,15 +76,29 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
     blocked = {str(b).lower().lstrip("@") for b in hc.get("blocked_streamers") or []}
     excluded = [str(w).lower() for w in hc.get("exclude_words") or [] if str(w).strip()]
     wanted_langs = [str(x).lower() for x in hc.get("require_languages") or [] if str(x).strip()]
+    lives: dict[str, set[str]] = {}   # lives autorisés par campagne, par streamer
     out = []
     for f in found:
         preset = match_streamer(streamers, f.streamer, f.streamer_name)
+        camp = campaign.of(preset)
         if f.key in seen:
             drop("déjà vus")
             continue
         if f.streamer.lower() in blocked:
             drop("streamer bloqué")
             continue
+        if camp:
+            # Campagne : seule la source autorisée compte (bon jour, bon live, bon jeu).
+            if campaign.ended(camp, now):
+                drop("campagne terminée")
+                continue
+            key = f.streamer.lower()
+            if key not in lives:
+                lives[key] = campaign.stream_ids(found, camp, key)
+            ok, reason = campaign.footage_ok(f, camp, lives[key])
+            if not ok:
+                drop(reason)
+                continue
         if not float(hc.get("min_duration_s", 8)) <= f.duration <= float(hc.get("max_duration_s", 120)):
             drop("durée hors limites")
             continue
@@ -98,11 +112,11 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
         if f.views < floor:
             drop("pas assez de vues")
             continue
-        if f.age_hours(now) > float(hc.get("max_age_hours", 30)):
-            drop("trop anciens")
+        if not camp and f.age_hours(now) > float(hc.get("max_age_hours", 30)):
+            drop("trop anciens")   # une campagne garde son stream jusqu'à la date limite
             continue
         title = f.title.lower()
-        if any(w in title for w in excluded):
+        if not preset.get("story_ok") and any(w in title for w in excluded):
             drop("mot exclu dans le titre")
             continue
         # Vues par heure, avec un amortissement pour ne pas surestimer les clips de dix minutes.
@@ -114,7 +128,9 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
         if boost != 1.0:
             score *= boost
             why += f", {f.game} prioritaire"
-        if preset:
+        if camp:
+            why += f", campagne « {camp.get('name') or preset.get('name')} »"
+        elif preset:
             score *= float(hc.get("allowlist_boost", 2.0))
             why += ", streamer suivi"
         elif wanted_langs and not f.language:
@@ -129,13 +145,14 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
             drop("autre langue")
             continue
         out.append((score, f, preset, why))
-    # Langue connue d'abord, puis les clips au dessus du seuil de vues, puis la vitesse.
-    out.sort(key=lambda t: ("langue à vérifier" in t[3], "peu de vues" in t[3], -t[0]))
-    cap = int(hc.get("max_per_streamer_day", 2))
+    # Campagnes rémunérées d'abord, puis langue connue, puis les clips au dessus du seuil de vues,
+    # puis la vitesse.
+    out.sort(key=lambda t: (not campaign.of(t[2]), "langue à vérifier" in t[3], "peu de vues" in t[3], -t[0]))
     unknown_cap = int(hc.get("max_unknown_language", 1))
     picked, count, unknown = [], {}, 0
     for item in out:
         s = item[1].streamer.lower()
+        cap = int(item[2].get("max_per_day", hc.get("max_per_streamer_day", 2)))
         if count.get(s, 0) + made_today(seen, s) >= cap:
             drop("quota du streamer atteint")
             continue
@@ -152,12 +169,15 @@ def rank(found: list[Found], cfg: dict, streamers: list[dict], seen: dict,
 def to_request(f: Found, preset: dict, cfg: dict, url: str | None = None) -> ClipRequest:
     hc = cfg["hunt"]
     langs = None
-    if f.platform != "twitch" or not f.language:   # Twitch filtre déjà la langue à la source
+    spoken = campaign.language(preset)
+    if spoken:                                      # langue du streamer, donnée dans streamers.yaml
+        langs = [spoken]
+    elif f.platform != "twitch" or not f.language:   # Twitch filtre déjà la langue à la source
         langs = [str(x).lower() for x in hc.get("require_languages") or []] or None
     return ClipRequest(
         url=url or f.url, credit=preset.get("credit") or (f"@{f.streamer}" if f.streamer else None),
-        layout=preset.get("layout"), count=1, raw="chasse", game_hint=f.game,
-        min_score=float(hc.get("min_ai_score", 6)), langs=langs,
+        layout=preset.get("layout"), count=1, raw="chasse", game_hint=f.game, lang=spoken or None,
+        min_score=float(preset.get("min_ai_score", hc.get("min_ai_score", 6))), langs=langs,
         meta={"title": f.title, "channel": f.streamer_name, "handle": f"@{f.streamer}" if f.streamer else "",
               "webpage_url": f.url, "platform": f.platform, "views": f.views, "streamer": f.streamer,
               "created": f.created_at.isoformat(), "found_why": ""})
@@ -166,15 +186,25 @@ def to_request(f: Found, preset: dict, cfg: dict, url: str | None = None) -> Cli
 # ---------------------------------------------------------------- Un passage complet
 
 def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
-             dry_run: bool = False, max_clips: int | None = None) -> int:
+             dry_run: bool = False, max_clips: int | None = None, campaign_only: bool = False) -> int:
     hc = cfg["hunt"]
     if not hc.get("enabled", True):
         log("Chasse désactivée dans config.yaml.")
         return 0
     seen = load_seen()
+    if campaign_only:   # passages en plus d'un jour de campagne : uniquement les streamers en campagne
+        streamers = [s for s in streamers if campaign.of(s) and not campaign.ended(campaign.of(s))]
+        if not streamers:
+            log("Passage réservé aux campagnes, mais aucune campagne en cours dans streamers.yaml.")
+            return 0
+        cfg = dict(cfg, hunt=dict(hc, twitch=dict(hc.get("twitch") or {}, enabled=False),
+                                  kick=dict(hc.get("kick") or {}, enabled=False)))
+        hc = cfg["hunt"]
     found, source_errors = discover(cfg, streamers)
     stats: dict = {}
     ranked = rank(found, cfg, streamers, seen, stats=stats)
+    if campaign_only:
+        ranked = [r for r in ranked if campaign.of(r[2])]
     log(f"Chasse : {len(found)} clip(s) trouvés, {len(ranked)} retenus après tri.")
     if stats:
         log("Écartés : " + describe_stats(stats))
@@ -185,7 +215,9 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
         return 0
 
     want = max_clips or int(hc.get("max_per_run", 3))
-    budget = int(hc.get("max_candidates", want * 2))
+    if not max_clips and ranked and campaign.of(ranked[0][2]):
+        want = max(want, int(hc.get("campaign_max_per_run", want)))   # jour de campagne : on en sort plus
+    budget = max(int(hc.get("max_candidates", want * 2)), want * 2)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     results: list[Result] = []
     skipped: list[str] = []

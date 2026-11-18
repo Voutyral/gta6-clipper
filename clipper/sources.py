@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 import requests
 
+from . import campaign
 from .util import log
 
 TWITCH_GQL = "https://gql.twitch.tv/gql"
@@ -142,7 +143,10 @@ def _kick_clip(c: dict, game_hint: str = "") -> Found | None:
         duration=float(c.get("duration") or 0), created_at=_when(c.get("created_at")),
         streamer=slug, streamer_name=str(ch.get("username") or slug), language="",
         game=str(cat.get("name") or game_hint), thumbnail=str(c.get("thumbnail_url") or ""),
-        extra={"m3u8": c.get("clip_url") or ""})
+        extra={"m3u8": c.get("clip_url") or c.get("video_url") or "",
+               # numéro du live d'où vient le clip : sert à reconnaître le stream d'une campagne
+               "livestream_id": str(c.get("livestream_id") or ""),
+               "mature": bool(c.get("is_mature"))})
 
 
 def kick_category_clips(slug: str, *, period: str = "24hr") -> list[Found]:
@@ -152,11 +156,23 @@ def kick_category_clips(slug: str, *, period: str = "24hr") -> list[Found]:
     return [f for f in out if f]
 
 
-def kick_channel_clips(slug: str, *, period: str = "24hr") -> list[Found]:
+def kick_channel_clips(slug: str, *, period: str = "24hr", sort: str = "view", pages: int = 1,
+                       since: datetime | None = None) -> list[Found]:
+    """Clips d'une chaîne Kick. Avec `sort="date"`, les plus récents d'abord : on tourne les pages
+    jusqu'à `since` (début de la fenêtre d'une campagne) ou jusqu'à `pages` pages."""
     t = _KICK_TIME.get(period, "day")
-    data = _kick_get(f"https://kick.com/api/v2/channels/{slug}/clips?cursor=0&sort=view&time={t}")
-    out = [_kick_clip(c) for c in (data.get("clips") or [])]
-    return [f for f in out if f]
+    out: list[Found] = []
+    cursor = "0"
+    for _ in range(max(1, int(pages))):
+        data = _kick_get(f"https://kick.com/api/v2/channels/{slug}/clips?cursor={cursor}&sort={sort}&time={t}")
+        got = [f for f in (_kick_clip(c) for c in (data.get("clips") or [])) if f]
+        out.extend(got)
+        cursor = str(data.get("nextCursor") or data.get("next_cursor") or "")
+        if not got or not cursor or cursor == "0":
+            break
+        if since is not None and min(f.created_at for f in got) < since:
+            break
+    return out
 
 
 # ---------------------------------------------------------------- Tout ensemble
@@ -187,10 +203,22 @@ def discover(cfg: dict, streamers: list[dict]) -> tuple[list[Found], list[str]]:
         for slug in kk.get("categories") or []:
             collect(f"Kick « {slug} »", kick_category_clips, slug, period=period)
     for s in streamers:   # streamers autorisés : suivis même hors des catégories ci-dessus
+        camp = campaign.of(s)
+        if camp and campaign.ended(camp):
+            continue
         if s.get("twitch"):
-            collect(f"Twitch @{s['twitch']}", twitch_user_clips, str(s["twitch"]), period=period)
+            collect(f"Twitch @{s['twitch']}", twitch_user_clips, str(s["twitch"]),
+                    period="30d" if camp else period)
         if s.get("kick"):
-            collect(f"Kick @{s['kick']}", kick_channel_clips, str(s["kick"]), period=period)
+            if camp:
+                # Campagne : tous les clips du stream autorisé, même plusieurs jours après,
+                # les plus vus du mois et les plus récents (page après page).
+                since = campaign.window(camp)[0]
+                collect(f"Kick @{s['kick']} (plus vus)", kick_channel_clips, str(s["kick"]), period="30d")
+                collect(f"Kick @{s['kick']} (récents)", kick_channel_clips, str(s["kick"]), period="30d",
+                        sort="date", pages=6, since=since)
+            else:
+                collect(f"Kick @{s['kick']}", kick_channel_clips, str(s["kick"]), period=period)
     unique: dict[str, Found] = {}
     for f in found:
         unique.setdefault(f.key, f)

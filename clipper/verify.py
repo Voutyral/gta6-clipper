@@ -12,6 +12,11 @@ from .util import probe_media
 RISK_LABELS = {
     "cinematique": "cinématique du jeu isolée (Rockstar les fait retirer)",
     "spoiler": "révélation majeure de l'histoire (Rockstar les fait retirer)",
+    "explicite": "contenu explicite ou propos haineux : interdit sur TikTok et YouTube",
+    "bande_annonce": "bande-annonce, vidéo officielle ou fuite au lieu du jeu en direct",
+}
+ALLOWED_NOTES = {   # risques permis par une campagne : signalés, sans bloquer
+    "spoiler": "moment d'histoire : « SPOILER » sur la couverture et dans la légende, rien n'est dévoilé",
 }
 RISK_NOTES = {
     "violence_debut": "violence graphique dans les 7 premières secondes : pas de pub sur ce clip",
@@ -37,8 +42,11 @@ def first_frame_luma(path: str | Path) -> float | None:
 
 
 def verify(path: str | Path, *, facts: dict, risks: list[str], cfg: dict,
-           rights_ok: bool) -> dict:
-    """Retourne {"go": bool, "problems": [...], "notes": [...], "duration", "size_mb"}."""
+           rights_ok: bool, allow: set[str] | frozenset[str] = frozenset()) -> dict:
+    """Retourne {"go": bool, "problems": [...], "notes": [...], "duration", "size_mb"}.
+
+    `allow` : risques qu'une campagne demande expressément (ex. moments d'histoire), notés sans bloquer.
+    """
     problems: list[str] = []
     notes: list[str] = []
     info = probe_media(path)
@@ -67,7 +75,9 @@ def verify(path: str | Path, *, facts: dict, risks: list[str], cfg: dict,
     if facts.get("fallback"):
         notes.append("montage simplifié (les effets ont été refusés par ffmpeg)")
     for r in risks or []:
-        if r in RISK_LABELS:
+        if r in allow:
+            notes.append(ALLOWED_NOTES.get(r, f"risque « {r} » permis par la campagne"))
+        elif r in RISK_LABELS:
             problems.append(RISK_LABELS[r])
         elif r in RISK_NOTES:
             notes.append(RISK_NOTES[r])

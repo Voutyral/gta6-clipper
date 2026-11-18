@@ -10,7 +10,19 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import ai, captions, cuts, deliver, detect, fetch, transcribe, vocab, wordfix, youtube
+from . import (
+    ai,
+    campaign,
+    captions,
+    cuts,
+    deliver,
+    detect,
+    fetch,
+    transcribe,
+    vocab,
+    wordfix,
+    youtube,
+)
 from . import verify as qc
 from .config import match_streamer
 from .render import Plan, contact_sheet, make_proxy, render
@@ -162,13 +174,19 @@ def hashtags_for(game: str, cfg: dict) -> list[str]:
     return list(meta["hashtags"])
 
 
-def build_description(desc: str, credit: str, url: str, cfg: dict, game: str = "") -> str:
+def build_description(desc: str, credit: str, url: str, cfg: dict, game: str = "",
+                      preset: dict | None = None, lang: str = "fr", spoiler: bool = False) -> str:
     lines = [desc.strip()] if desc.strip() else []
-    if not fetch.is_local(url):
+    if spoiler:
+        lines.insert(0, campaign.spoiler_line(lang))
+    extra = campaign.caption_lines(preset)
+    if extra:                       # la fiche du streamer dit comment le créditer (campagne)
+        lines.extend(extra)
+    elif not fetch.is_local(url):
         lines.append(f"Source : {credit} ({url})" if credit else f"Source : {url}")
     elif credit:
         lines.append(f"Source : {credit}")
-    lines.append(" ".join(hashtags_for(game, cfg)))
+    lines.append(" ".join(campaign.hashtags(preset) or hashtags_for(game, cfg)))
     return "\n\n".join(lines)
 
 
@@ -190,6 +208,7 @@ def facecam_box(raw) -> dict | None:
 def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipRequest, info: dict,
                cfg: dict, preset: dict, credit: str, idx: int) -> Plan:
     det, meta = cfg["detection"], cfg["metadata"]
+    lang_out = req.lang or campaign.language(preset) or meta["language"]
     dur = c.end - c.start
     start, end, score = c.start, c.end, float(c.score)
     ai_score = None
@@ -228,19 +247,35 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
     plan_cuts = []
     if ev and "nocut" not in req.flags:
         plan_cuts = cuts.from_ai(ev.get("cuts"), c.start, start, end, c.words, cfg["edit"])
+    flags = set(req.flags)
+    # Moment d'histoire permis par une campagne : alerte sur la couverture, rien de dévoilé,
+    # et pas d'aperçu du moment fort en ouverture (il révélerait la chute dès la première image).
+    spoiler = bool(preset.get("story_ok")) and "spoiler" in risks
+    if spoiler:
+        hook, context = campaign.spoiler_hook(lang_out), ""
+        flags.add("noteaser")
+        if title and "spoiler" not in title.lower():
+            title = " ".join(title.split())[:83] + " (SPOILER)"
+    if campaign.off(preset.get("teaser", "auto")):
+        flags.add("noteaser")
+    if campaign.off(preset.get("music", "auto")):
+        flags.add("nomusic")
     if not hook:
-        hook = meta["fallback_hooks"][idx % len(meta["fallback_hooks"])]
+        hooks = preset.get("fallback_hooks") or meta["fallback_hooks"]
+        hook = str(hooks[idx % len(hooks)])
     if not title:
         base = (info.get("title") or meta["game"]).strip()
-        who = credit.lstrip("@")
-        title = f"{who} : {base}" if who and who.lower() not in base.lower() else base
+        who = (str(preset.get("name") or "") if campaign.of(preset) else "") or credit.lstrip("@")
+        sep = " : " if lang_out == "fr" else ": "
+        title = f"{who}{sep}{base}" if who and who.lower() not in base.lower() else base
     if not tags:
         tags = [meta["game"], "gaming", "clip"] + ([credit.lstrip("@")] if credit else [])
     return Plan(
         src=c.src, start=start, end=end, words=c.words, peaks=peaks, hook=clean_hook(hook),
         context=context.strip()[:60], credit=credit, title=" ".join(title.split())[:95],
-        description=build_description(desc, credit, info.get("webpage_url") or req.url, cfg, game),
-        tags=tags, layout=req.layout or "auto", preset=preset, flags=set(req.flags), score=score,
+        description=build_description(desc, credit, info.get("webpage_url") or req.url, cfg, game,
+                                      preset=preset, lang=lang_out, spoiler=spoiler),
+        tags=tags, layout=req.layout or "auto", preset=preset, flags=flags, score=score,
         what=what, risks=risks, source_url=info.get("webpage_url") or req.url,
         source_time=c.origin + start, lang=c.lang, ai_score=ai_score, cuts=plan_cuts)
 
@@ -274,11 +309,12 @@ def ai_fix_words(c: Candidate, ev: dict, req: ClipRequest, cap: dict) -> bool:
 def plan_candidates(cands: list[Candidate], req: ClipRequest, info: dict, cfg: dict, preset: dict,
                     credit: str, work: Path, n: int) -> tuple[list[Plan], str]:
     """Transcrit, évalue (IA si disponible) et retient les `n` meilleurs passages."""
-    lang_out = req.lang or cfg["metadata"]["language"]
+    lang_out = req.lang or campaign.language(preset) or cfg["metadata"]["language"]
     use_ai = bool(ai.providers(cfg)) and "noai" not in req.flags
     cap = cfg["captions"]
     words_vocab = vocab.for_clip(vocab.load_vocab(), credit, req.meta.get("streamer", ""),
-                                 info.get("channel", ""))
+                                 info.get("channel", ""), str(preset.get("name") or ""))
+    brief = campaign.brief_for_ai(preset)
     if not use_ai:
         cands = sorted(cands, key=lambda c: c.score, reverse=True)[:n]
     plans: list[Plan] = []
@@ -308,7 +344,8 @@ def plan_candidates(cands: list[Candidate], req: ClipRequest, info: dict, cfg: d
                 cfg, text=transcribe.words_to_lines(c.words, c.start), dur=dur,
                 peak=(c.peak - c.start) if c.peak is not None else None,
                 title=info.get("title", ""), credit=credit, lang=lang_out, video=video,
-                sheet=sh.read_bytes() if sh else None, game=req.game_hint, vocab=words_vocab)
+                sheet=sh.read_bytes() if sh else None, game=req.game_hint, vocab=words_vocab,
+                brief=brief)
             used = used or name
             if ev and name == "gemini" and video is not None:
                 if not ai_fix_words(c, ev, req, cap):
@@ -348,19 +385,24 @@ def process_request(req: ClipRequest, cfg: dict, streamers: list[dict], work: Pa
         name = f"{stamp}-{slugify(info.get('channel') or info.get('title') or 'clip', 24)}-{idx}{k}.mp4"
         out = outdir / name
         facts = render(plan, out, cfg, work / f"render{k}")
-        check = qc.verify(out, facts=facts, risks=plan.risks, cfg=cfg, rights_ok=bool(preset))
+        check = qc.verify(out, facts=facts, risks=plan.risks, cfg=cfg, rights_ok=bool(preset),
+                          allow={"spoiler"} if preset.get("story_ok") else set())
         log(f"{'GO' if check['go'] else 'NO-GO'} : {name} ({check['duration']:.1f} s, "
             f"{check['size_mb']:.1f} Mo) {check['problems'] or ''}")
+        meta = {"ai_score": plan.ai_score, "what": plan.what, "streamer": req.meta.get("streamer") or credit.lstrip("@"),
+                "platform": req.meta.get("platform", ""), "views": req.meta.get("views"),
+                "source_title": info.get("title", ""), "found_why": req.meta.get("found_why", ""),
+                "layout": facts.get("layout")}
+        if campaign.of(preset):
+            # Légende complète à coller (titre, crédit exigé, hashtags) et règles de la campagne.
+            meta.update(campaign=campaign.card(preset), caption=f"{plan.title}\n\n{plan.description}")
         results.append(Result(
             path=out, title=plan.title, description=plan.description, tags=plan.tags,
             hook=plan.hook, go=check["go"], problems=check["problems"], notes=check["notes"],
             duration=check["duration"], size_mb=check["size_mb"], credit=credit,
             source_url=plan.source_url, facts=facts, provider=provider,
-            paid=bool(preset.get("paid")), lang=req.lang or cfg["metadata"]["language"],
-            meta={"ai_score": plan.ai_score, "what": plan.what, "streamer": req.meta.get("streamer") or credit.lstrip("@"),
-                  "platform": req.meta.get("platform", ""), "views": req.meta.get("views"),
-                  "source_title": info.get("title", ""), "found_why": req.meta.get("found_why", ""),
-                  "layout": facts.get("layout")}))
+            paid=bool(preset.get("paid")),
+            lang=req.lang or campaign.language(preset) or cfg["metadata"]["language"], meta=meta))
     return results
 
 

@@ -3,7 +3,7 @@
     python -m clipper run                    # lit la demande dans la variable REQUEST_TEXT
     python -m clipper run --request "LIEN 12:30-13:10 @streamer"
     python -m clipper local video.mp4 --options "0:40-1:10 @streamer #crop"
-    python -m clipper hunt [--dry-run] [--max 3]   # chasse aux clips du moment
+    python -m clipper hunt [--dry-run] [--max 3] [--campaign-only]   # chasse aux clips du moment
     python -m clipper gallery --out site           # page de la galerie
     python -m clipper doctor --request "LIEN"   # bilan de santé
 """
@@ -30,6 +30,8 @@ def main(argv: list[str] | None = None) -> int:
     p_radar = sub.add_parser("hunt", aliases=["radar"], help="chasse : trouve, monte et range les clips du moment")
     p_radar.add_argument("--dry-run", action="store_true")
     p_radar.add_argument("--max", type=int, default=None)
+    p_radar.add_argument("--campaign-only", action="store_true",
+                         help="uniquement les streamers en campagne (passages en plus d'un jour de campagne)")
     p_gal = sub.add_parser("gallery", help="construit la page de la galerie")
     p_gal.add_argument("--from-dir", default=None, help="fiches locales au lieu des releases (essais)")
     p_doc = sub.add_parser("doctor", help="bilan de santé : clés, services, liens")
@@ -73,7 +75,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd in ("hunt", "radar"):
         from .hunt import run_hunt
-        return run_hunt(cfg, streamers, base, outdir, dry_run=args.dry_run, max_clips=args.max)
+        return run_hunt(cfg, streamers, base, outdir, dry_run=args.dry_run, max_clips=args.max,
+                        campaign_only=args.campaign_only)
 
     if args.cmd == "gallery":
         from .gallery import build
