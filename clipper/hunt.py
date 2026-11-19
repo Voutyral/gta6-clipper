@@ -9,12 +9,13 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import campaign, deliver, fetch
+from . import campaign, deliver, fetch, sources
 from .config import ROOT, match_streamer
 from .pipeline import Result, deliver_result, process_request
 from .request import ClipRequest
@@ -23,6 +24,10 @@ from .transcribe import guess_language
 from .util import game_key, log
 
 SEEN = ROOT / "state" / "seen.json"
+# Clips déjà faits à refaire avec le montage corrigé (sous-titres, gros mots…) : la chasse les
+# passe en premier, même déjà vus, puis les retire de la liste. Format : [{"url", "streamer", "title"}].
+REDO = ROOT / "state" / "redo.json"
+REDO_PER_RUN = 12   # un passage dure au plus 90 min : environ 2 min par clip
 
 
 # ---------------------------------------------------------------- Mémoire des clips déjà vus
@@ -49,6 +54,42 @@ def save_seen(seen: dict, keep_days: int = 30) -> None:
             continue
     SEEN.parent.mkdir(exist_ok=True)
     SEEN.write_text(json.dumps(keep, indent=0, ensure_ascii=False))
+
+
+def load_redo() -> list[dict]:
+    try:
+        data = json.loads(REDO.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    return [d for d in data if isinstance(d, dict) and d.get("url")] if isinstance(data, list) else []
+
+
+def save_redo(items: list[dict]) -> None:
+    if items:
+        REDO.parent.mkdir(exist_ok=True)
+        REDO.write_text(json.dumps(items, indent=1, ensure_ascii=False), encoding="utf-8")
+    elif REDO.exists():
+        REDO.unlink()
+
+
+def redo_found(item: dict, found: list[Found]) -> Found:
+    """Le clip à refaire tel que la chasse vient de le trouver, sinon relu sur Kick, sinon rebâti
+    depuis son lien (le montage relit la page du clip de toute façon)."""
+    url = str(item["url"])
+    for f in found:
+        if f.url == url:
+            return f
+    m = re.search(r"kick\.com/([^/?#]+)/clips/([\w-]+)", url)
+    if m:
+        got = sources.kick_clip(m.group(2))
+        if got:
+            return got
+    slug = m.group(1) if m else str(item.get("streamer") or "")
+    cid = m.group(2) if m else url.rstrip("/").rsplit("/", 1)[-1]
+    return Found(platform="kick" if "kick.com" in url else "twitch", id=cid, url=url,
+                 title=str(item.get("title") or ""), views=int(item.get("views") or 0), duration=0.0,
+                 created_at=datetime.now(timezone.utc), streamer=slug, streamer_name=slug,
+                 game=str(item.get("game") or ""))
 
 
 def made_today_total(seen: dict, streamers: list[dict] | None = None) -> int:
@@ -262,6 +303,23 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
     ranked = rank(found, cfg, streamers, seen, stats=stats)
     if campaign_only:
         ranked = [r for r in ranked if campaign.of(r[2])]
+    # Clips à refaire (montage corrigé) : en tête de file, même déjà vus. Les vérifications de la
+    # campagne (bon stream, bon jeu) ont été faites au premier montage.
+    redo = load_redo()
+    redo_jobs, origin = [], {}   # origin : clip à refaire → lien noté dans redo.json
+    for item in redo[:REDO_PER_RUN]:
+        f = redo_found(item, found)
+        preset = match_streamer(streamers, f.streamer, f.streamer_name)
+        if campaign_only and not campaign.of(preset):
+            continue
+        why = "à refaire avec le montage corrigé" + (f", campagne « {campaign.of(preset).get('name')} »"
+                                                      if campaign.of(preset) else "")
+        redo_jobs.append((0.0, f, preset, why))
+        origin[id(f)] = str(item["url"])
+    if redo_jobs:
+        urls = {j[1].url for j in redo_jobs}
+        ranked = redo_jobs + [r for r in ranked if r[1].url not in urls]
+        log(f"À refaire : {len(redo_jobs)} clip(s) en tête de file, {max(0, len(redo) - len(redo_jobs))} après.")
     log(f"Chasse : {len(found)} clip(s) trouvés, {len(ranked)} retenus après tri.")
     if stats:
         log("Écartés : " + describe_stats(stats))
@@ -274,6 +332,7 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
     want = max_clips or int(hc.get("max_per_run", 3))
     if not max_clips and ranked and campaign.of(ranked[0][2]):
         want = max(want, int(hc.get("campaign_max_per_run", want)))   # jour de campagne : on en sort plus
+    want = max(want, len(redo_jobs))   # les clips à refaire passent tous, sans prendre la place des autres jours
     # Plafond du jour pour les clips hors campagne : la chasse passe souvent, la galerie reste lisible.
     day_cap = int(hc.get("max_per_day", 0) or 0)
     free_left = None
@@ -286,11 +345,13 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
     results: list[Result] = []
     skipped: list[str] = []
     errors: list[tuple[str, str, str]] = []
+    attempted: set[str] = set()
     for i, (_, f, preset, why) in enumerate(ranked[:budget]):
         if len(results) >= want:
             break
         if free_left is not None and not campaign.of(preset) and free_left <= 0:
             continue
+        attempted.add(origin.get(id(f), f.url))
         work = base / f"hunt{i}"
         made: list[Result] = []
         retry = False
@@ -324,6 +385,8 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
                 seen[f.key] = {"d": today, "s": f.streamer, "ok": bool(made)}
             shutil.rmtree(work, ignore_errors=True)
     save_seen(seen)
+    if redo_jobs:
+        save_redo([d for d in redo if str(d["url"]) not in attempted])
 
     report = hunt_report(results, skipped, errors, source_errors)
     deliver.step_summary("## Chasse aux clips\n\n" + report)

@@ -158,7 +158,8 @@ Limite connue : le cadre de la webcam est donné par Gemini et déborde parfois 
 
 ## Dépannage
 
-* **La chasse ne trouve rien** : regarde le résumé du lancement (onglet **Actions**). Les sources illisibles y sont listées. Les clips déjà vus ne reviennent jamais.
+* **La chasse ne trouve rien** : regarde le résumé du lancement (onglet **Actions**). Les sources illisibles y sont listées. Les clips déjà vus ne reviennent jamais, sauf ceux listés dans `state/redo.json`.
+* **Refaire des clips après une correction du montage** : mets leurs liens dans `state/redo.json` (`[{"url": "…"}]`). La chasse les refait en premier, 12 par passage, puis les retire de la liste. Dans la galerie, la nouvelle version remplace l'ancienne et garde sa coche « Posté ».
 * **Trop peu de clips** : baisse `min_ai_score` ou `min_views`, ou ajoute `en` aux langues dans `config.yaml`.
 * **Tout vérifier d'un coup** : onglet **Actions**, **Diagnostic**, **Run workflow**. Le bilan dit si Gemini et l'envoi YouTube répondent, et teste les liens que tu lui donnes.
 

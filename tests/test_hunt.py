@@ -256,3 +256,56 @@ def test_gta6_clips_come_first():
     assert "prioritaire" in ranked[0][3]
     assert hunt.game_key("GTA VI (GTA)") == hunt.game_key("Grand Theft Auto VI") == "gta6"
     assert hunt.game_key("Grand Theft Auto V") == "gta5"
+
+
+def test_clips_to_redo_go_first_even_if_seen_then_leave_the_list(monkeypatch, tmp_path):
+    cfg = load_config()
+    monkeypatch.setattr(hunt, "SEEN", tmp_path / "seen.json")
+    (tmp_path / "seen.json").write_text(json.dumps({"twitch:c1": {"d": NOW.strftime("%Y-%m-%d"), "s": "bob", "ok": True}}))
+    hunt.save_redo([{"url": found(1).url, "streamer": "bob", "title": "Gros fail"},
+                    {"url": "https://www.twitch.tv/zoe/clip/c9", "streamer": "zoe", "title": "Ancien"}])
+    monkeypatch.setattr(hunt, "discover", lambda c, s: ([found(1, hours=1), found(2, hours=1, streamer="alice")], []))
+    calls = []
+
+    class R:
+        go, title, meta = True, "t", {}
+
+    monkeypatch.setattr(hunt, "process_request", lambda req, *a: calls.append(req.url) or [R()])
+    monkeypatch.setattr(hunt, "deliver_result", lambda res, cfg: None)
+    for name in ("open_issue", "markdown_report", "cleanup_releases"):
+        monkeypatch.setattr(hunt.deliver, name, lambda *a, **k: "")
+    monkeypatch.setattr(hunt.deliver, "pages_url", lambda: "")
+    hunt.run_hunt(cfg, [], tmp_path, tmp_path)
+    # Le clip déjà vu passe en premier, le clip introuvable dans la chasse est rebâti depuis son lien.
+    assert calls[:2] == [found(1).url, "https://www.twitch.tv/zoe/clip/c9"]
+    assert found(2, streamer="alice").url in calls          # les autres clips passent aussi
+    assert hunt.load_redo() == [] and not hunt.REDO.exists()
+
+
+def test_redo_list_is_kept_for_the_next_run_when_too_long(monkeypatch, tmp_path):
+    monkeypatch.setattr(hunt, "REDO_PER_RUN", 1)
+    hunt.save_redo([{"url": "https://www.twitch.tv/a/clip/x1"}, {"url": "https://www.twitch.tv/a/clip/x2"}])
+    monkeypatch.setattr(hunt, "SEEN", tmp_path / "seen.json")
+    monkeypatch.setattr(hunt, "discover", lambda c, s: ([], []))
+    monkeypatch.setattr(hunt, "process_request", lambda req, *a: [])
+    for name in ("open_issue", "markdown_report", "cleanup_releases"):
+        monkeypatch.setattr(hunt.deliver, name, lambda *a, **k: "")
+    monkeypatch.setattr(hunt.deliver, "pages_url", lambda: "")
+    hunt.run_hunt(load_config(), [], tmp_path, tmp_path)
+    assert [d["url"] for d in hunt.load_redo()] == ["https://www.twitch.tv/a/clip/x2"]
+
+
+def test_gallery_keeps_the_posted_mark_of_a_redone_clip(tmp_path):
+    src = tmp_path / "clips"
+    src.mkdir()
+    cards = {"20261119-173336-dom-10": "https://kick.com/d/clips/a", "20261120-021500-dom-10": "https://kick.com/d/clips/a",
+             "20261120-021500-dom-20": "https://kick.com/d/videos/v", "20261120-021500-dom-21": "https://kick.com/d/videos/v",
+             "20261119-120000-dom-30": "https://kick.com/d/videos/v"}
+    for name, url in cards.items():
+        (src / f"{name}.mp4").write_bytes(b"\x00")
+        (src / f"{name}.json").write_text(json.dumps({"file": f"{name}.mp4", "go": True, "title": name, "source_url": url,
+                                                      "made_at": f"2026-11-{name[6:8]}T{name[9:11]}:00:00+00:00"}))
+    gallery.build(tmp_path / "site", load_config(), from_dir=src)
+    got = {c["file"]: c.get("replaces") for c in json.loads((tmp_path / "site" / "clips.json").read_text())["clips"]}
+    assert got == {"20261120-021500-dom-10.mp4": ["20261119-173336-dom-10.mp4"],   # refait : garde la coche
+                   "20261120-021500-dom-20.mp4": None, "20261120-021500-dom-21.mp4": None}   # rediffusion : non

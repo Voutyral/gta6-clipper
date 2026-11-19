@@ -109,6 +109,12 @@ def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
     pairs = cards_from_dir(from_dir) if from_dir else cards_from_releases(repo, days, tmp)
     pairs = [(c, a) for c, a in pairs if c.get("go") and c.get("file")]
     shown = {id(c) for c in keep_latest([c for c, _ in pairs], gc.get("hide"))}
+    # Versions d'un même clip par lancement : un clip refait (montage corrigé) remplace l'ancien,
+    # et s'il était coché « Posté » il le reste. Seulement pour un moment par source et par
+    # lancement : les moments d'une rediffusion ne se confondent pas entre eux.
+    runs: dict[str, dict[str, list[str]]] = {}
+    for c, _ in pairs:
+        runs.setdefault(c.get("source_url") or c["file"], {}).setdefault(str(c["file"])[:15], []).append(c["file"])
     pairs = [(c, a) for c, a in pairs if id(c) in shown]
     pairs.sort(key=lambda ca: _when(ca[0].get("made_at", "")), reverse=True)
     camps = active_campaigns()
@@ -143,6 +149,10 @@ def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
         camp = by_name.get((card.get("campaign") or {}).get("name")) or card.get("campaign") or {}
         head = (card.get("caption") or "").split("\n", 1)[0].strip() or card.get("title") or ""
         card["yt_title"] = campaign.yt_title(head, camp.get("title_tags"))
+        by_run, mine = runs.get(card.get("source_url") or card["file"], {}), str(card["file"])[:15]
+        older = [fs[0] for r, fs in by_run.items() if r != mine and len(fs) == 1]
+        if older and len(by_run.get(mine, [])) == 1:
+            card["replaces"] = older
         clips.append(card)
         used_mb += size
     shutil.rmtree(tmp, ignore_errors=True)

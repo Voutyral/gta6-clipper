@@ -161,6 +161,16 @@ def _kick_clip(c: dict, game_hint: str = "") -> Found | None:
                "mature": bool(c.get("is_mature"))})
 
 
+def kick_clip(clip_id: str) -> Found | None:
+    """Un clip Kick précis, retrouvé par son identifiant (pour le refaire après une correction)."""
+    try:
+        data = _kick_get(f"https://kick.com/api/v2/clips/{clip_id}")
+    except Exception as exc:
+        log(f"Kick : clip {clip_id} illisible ({exc}).")
+        return None
+    return _kick_clip(data.get("clip") or data)
+
+
 def kick_category_clips(slug: str, *, period: str = "24hr") -> list[Found]:
     t = _KICK_TIME.get(period, "day")
     data = _kick_get(f"https://kick.com/api/v2/categories/{slug}/clips?cursor=0&sort=view&time={t}")

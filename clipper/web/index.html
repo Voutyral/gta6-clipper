@@ -267,7 +267,7 @@
   let clips = [], view = "todo", data = {}, langView = "all";   // langView : all, fr ou en
   const langOf = (c) => (c.lang || "fr").toLowerCase();
   const langOk = (c) => langView === "all" || langOf(c) === langView;
-  const inView = (c) => langOk(c) && (view === "done") === memory.has(c.file);
+  const inView = (c) => langOk(c) && (view === "done") === isPosted(c);
   let selecting = false, picked = [], batch = null;   // batch : vidéos chargées pour la sélection en cours
   const files = new Map();                              // vidéos déjà chargées, par nom de fichier
 
@@ -284,6 +284,15 @@
       },
     };
   })();
+  // Un clip refait (montage corrigé) reste « posté » si son ancienne version l'était.
+  const isPosted = (c) => memory.has(c.file) || (c.replaces || []).some((f) => memory.has(f));
+  function togglePosted(c) {
+    if (isPosted(c)) {
+      [c.file, ...(c.replaces || [])].forEach((f) => { if (memory.has(f)) memory.toggle(f); });
+      return false;
+    }
+    return memory.toggle(c.file);
+  }
 
   let toastTimer;
   function toast(msg) {
@@ -474,7 +483,7 @@
   }
 
   function ticket(c, i) {
-    const posted = memory.has(c.file);
+    const posted = isPosted(c);
     // Campagne : légende complète (titre, crédit exigé, hashtags). Sinon titre et hashtags seulement.
     const caption = c.caption || [c.title, (c.description || "").split("\n").filter((l) => l.startsWith("#")).join(" ")]
       .filter(Boolean).join("\n\n");
@@ -497,7 +506,7 @@
     const warns = (c.notes || []).filter((n) => !/aucune parole/.test(n));
     const doneBtn = el("button", { class: "btn ghost" + (posted ? " on" : ""), type: "button" }, posted ? "✓ Posté" : "Posté ?");
     doneBtn.addEventListener("click", () => {
-      const on = memory.toggle(c.file);
+      const on = togglePosted(c);
       card.classList.toggle("posted", on);
       doneBtn.classList.toggle("on", on);
       doneBtn.textContent = on ? "✓ Posté" : "Posté ?";
@@ -525,7 +534,7 @@
 
   // ---------- Grille ----------
   function tile(c, i) {
-    const posted = memory.has(c.file);
+    const posted = isPosted(c);
     const order = picked.indexOf(c.file);
     const meta = [langOf(c).toUpperCase(), (c.platform || "").toLowerCase(), `${Math.round(c.duration || 0)} s`,
                   ago(c.made_at)].filter(Boolean).join(" · ");
@@ -577,7 +586,7 @@
     if (!items.length) return;
     const go = $("dock-go");
     if (batch && batch.shared) {           // après l'envoi : on range les clips dans « Postés »
-      items.forEach((c) => { if (!memory.has(c.file)) memory.toggle(c.file); });
+      items.forEach((c) => { if (!isPosted(c)) memory.toggle(c.file); });
       toast(`${items.length} clip${items.length > 1 ? "s" : ""} rangé${items.length > 1 ? "s" : ""} dans « Postés »`);
       setSelecting(false);
       return;
@@ -630,7 +639,7 @@
 
   function count() {
     const pool = clips.filter(langOk);
-    const done = pool.filter((c) => memory.has(c.file)).length;
+    const done = pool.filter(isPosted).length;
     document.getElementById("n-todo").textContent = pool.length - done;
     document.getElementById("n-done").textContent = done;
   }
