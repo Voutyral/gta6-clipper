@@ -226,3 +226,22 @@ def test_unknown_webcam_keeps_the_whole_game_picture():
     assert "plein_cadre" not in seen.flags                                       # l'IA a regardé : pas de webcam
     assert "scale=1620:-2" in layout_chain("0:v", "v0", "blur", ed, {}, "60", "0")       # zoom 1.5 : côtés rognés
     assert "scale=1080:-2" in layout_chain("0:v", "v0", "blur", dict(ed, zoom=1.0), {}, "60", "0")
+
+
+def test_campaign_cuts_never_go_below_the_brief_minimum():
+    from pathlib import Path
+
+    from clipper import campaign
+    from clipper.pipeline import Candidate, build_plan
+    from clipper.request import ClipRequest
+    dom = {"name": "Dom", "kick": "dasgasd3m", "tighten": "off", "detection": {"clip_min_s": 20, "clip_max_s": 60},
+           "campaign": {"name": "C", "opens": "2026-11-19T09:00:00-08:00", "closes": "2026-12-19T23:59:00-08:00"}}
+    cfg = campaign.tuned(load_config(), dom)
+    cand = Candidate(Path("a.mp4"), 0.0, 30.0, None, 1.0, 0.0, locked=True)
+    info = {"title": "GTA 6", "webpage_url": "https://kick.com/dasgasd3m", "channel": "Dom"}
+    ev = {"score": 8, "cuts": [[4, 9], [12, 18]]}          # 11 s retirées : il resterait 19 s
+    plan = build_plan(cand, ev, [], ClipRequest(url="https://kick.com/x"), info, cfg, dom, "dasgasd3m on Kick", 0)
+    kept = 30.0 - sum(b - a for a, b in plan.cuts)
+    assert kept >= 20.0 and plan.cuts == [(12.0, 18.0)]    # la plus longue coupe seulement
+    free = build_plan(cand, ev, [], ClipRequest(url="https://kick.com/x"), info, load_config(), {}, "@x", 0)
+    assert len(free.cuts) == 2                            # hors campagne : 19 s restent permises

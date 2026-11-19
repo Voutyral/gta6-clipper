@@ -287,13 +287,19 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
         start, end = snap_to_words(start, end, c.words, c.start, c.end)
         start = skip_black(c, start, end)
     flags = set(req.flags)
+    ed = cfg["edit"]
+    if campaign.of(preset):
+        # Campagne : les coupes ne font jamais passer le clip sous la durée minimale du brief
+        # (le 19/11, un clip de Dom est sorti à 19,2 s pour « 20 à 60 secondes »).
+        floor = float(cfg["detection"].get("clip_min_s", 0) or 0)
+        ed = dict(ed, min_after_cuts_s=max(float(ed.get("min_after_cuts_s", 10)), floor))
     plan_cuts = []
     if ev and "nocut" not in flags:
-        plan_cuts = cuts.from_ai(ev.get("cuts"), c.start, start, end, c.words, cfg["edit"])
+        plan_cuts = cuts.from_ai(ev.get("cuts"), c.start, start, end, c.words, ed)
     # Méthode du monteur : on resserre aussi les silences où il ne se passe rien (son calme, image
     # immobile), que l'IA n'a pas signalés. Désactivable par streamer (`tighten: off`).
-    if "nocut" not in flags and cfg["edit"].get("jump_cuts", True) and cuts.tighten_on(cfg["edit"], preset):
-        plan_cuts = cuts.tighten(c.src, start, end, c.words, cfg["edit"], plan_cuts)
+    if "nocut" not in flags and ed.get("jump_cuts", True) and cuts.tighten_on(ed, preset):
+        plan_cuts = cuts.tighten(c.src, start, end, c.words, ed, plan_cuts)
     if ev and ev.get("captions_on_screen") is True:
         flags.add("nosub")   # le stream affiche déjà ses sous-titres : pas de deuxième ligne par-dessus
     # Sans réponse de l'IA (quota épuisé…), on ne sait pas où est la webcam : l'image du jeu reste
