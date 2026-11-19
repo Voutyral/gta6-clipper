@@ -40,8 +40,12 @@ jobs:
             echo "Galerie inactive : active GitHub Pages (Settings > Pages > Source : GitHub Actions)." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # Toujours la dernière version de main : une chasse lancée avant une correction (clip caché,
+      # réglage de la galerie) ne republie pas l'ancienne page en finissant.
       - uses: actions/checkout@v4
         if: steps.check.outputs.enabled == 'true'
+        with:
+          ref: main
 
       - uses: actions/setup-python@v5
         if: steps.check.outputs.enabled == 'true'
