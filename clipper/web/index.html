@@ -197,21 +197,27 @@
   .btn.primary.ready { background: var(--sea); }
   .btn.ghost { border-style: dashed; }
   .btn.on { background: var(--text-on-paper); color: var(--paper); }
+  /* Retour visuel de la copie, sur le bouton touché lui même. */
+  .btn.copied { background: var(--sea); border-color: var(--sea); color: var(--ink); animation: pop .3s ease-out; }
+  .btn.failed { background: var(--danger); border-color: var(--danger); color: #fff; animation: pop .3s ease-out; }
+  @keyframes pop { 40% { transform: scale(1.08); } }
 
   .empty { text-align: center; margin: 70px 8px; font-family: var(--mono); color: var(--muted); line-height: 1.6; }
   .empty strong { display: block; font-family: var(--display); font-weight: 400; font-size: 34px;
     color: var(--paper); letter-spacing: .5px; margin-bottom: 8px; text-transform: uppercase; }
 
-  .toast { position: fixed; left: 50%; bottom: calc(var(--safe-bottom) + 24px); z-index: 20;
+  /* Au dessus de la fiche d'un clip (30), sinon les messages tapés depuis la fiche restent cachés derrière. */
+  .toast { position: fixed; left: 50%; bottom: calc(var(--safe-bottom) + 24px); z-index: 40;
     transform: translate(-50%, calc(100% + 60px)); transition: transform .25s cubic-bezier(.2, .8, .2, 1);
     background: var(--paper); color: var(--text-on-paper); font-family: var(--mono); font-weight: 600;
     font-size: 13px; padding: 12px 16px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
-    max-width: 92vw; }
+    max-width: 92vw; pointer-events: none; }   /* ne bloque jamais un appui sur les boutons en dessous */
   .toast.show { transform: translate(-50%, 0); }
   .selecting .toast { bottom: calc(var(--safe-bottom) + 100px); }   /* au dessus de la barre de sélection */
   .selecting main { padding-bottom: calc(var(--safe-bottom) + 120px); }
 
-  @media (prefers-reduced-motion: reduce) { .ticket, .tile { animation: none; opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .ticket, .tile { animation: none; opacity: 1; transform: none; }
+    .btn.copied, .btn.failed { animation: none; } }
 </style>
 </head>
 <body>
@@ -277,17 +283,26 @@
     toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2200);
   }
 
-  async function copy(text, label) {
+  // Copie le texte puis le confirme sur le bouton touché (vert « ✓ Copié » pendant 2 s) et par un message en bas.
+  async function copy(text, btn, done, mark) {
+    let ok = true;
     try {
       await navigator.clipboard.writeText(text);
     } catch (e) {
       const ta = document.createElement("textarea");
       ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
       document.body.appendChild(ta); ta.select();
-      try { document.execCommand("copy"); } catch (err) {}
+      try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
       ta.remove();
     }
-    toast(label + " copié");
+    const label = btn.dataset.label || (btn.dataset.label = btn.textContent);
+    clearTimeout(btn._reset);
+    btn.classList.remove("copied", "failed");
+    void btn.offsetWidth;   // relance l'animation si on touche deux fois de suite
+    btn.classList.add(ok ? "copied" : "failed");
+    btn.textContent = ok ? mark : "Raté";
+    btn._reset = setTimeout(() => { btn.classList.remove("copied", "failed"); btn.textContent = label; }, 2000);
+    toast(ok ? done : "Copie impossible, retouche le bouton");
   }
 
   function ago(iso) {
@@ -461,8 +476,10 @@
         : c.paid ? el("div", { class: "warn" }, "💶 Campagne rémunérée : coche « promotion payante » en publiant.") : null,
       el("div", { class: "actions" },
         shareButton(c),
-        el("button", { class: "btn", type: "button", onclick: () => copy(c.title || "", "Titre") }, "Titre"),
-        el("button", { class: "btn", type: "button", onclick: () => copy(caption, "Légende") }, "Légende"),
+        el("button", { class: "btn", type: "button",
+                       onclick: (e) => copy(c.title || "", e.currentTarget, "Titre copié", "✓ Copié") }, "Titre"),
+        el("button", { class: "btn", type: "button",
+                       onclick: (e) => copy(caption, e.currentTarget, "Légende copiée", "✓ Copiée") }, "Légende"),
         doneBtn));
     card.append(screen, paper);
     return card;
