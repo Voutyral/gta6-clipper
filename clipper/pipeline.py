@@ -316,6 +316,15 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
                                     if start <= float(w.get("s", -1)) < end):
         risks = [*risks, "haine"]
         log("Insulte haineuse prononcée dans le passage : clip refusé (risque « haine »).")
+    # Campagne d'un jeu précis : Kick classe le clip d'après la catégorie du live, pas d'après l'image.
+    # Le 19/11, un clip de Dom « GTA 6 » montrait un jeu de zombies. Si l'IA voit clairement un autre
+    # jeu, le clip est refusé. Un « GTA 5 » vu sur un live GTA 6 reste accepté : l'IA confond souvent.
+    seen_game = str((ev or {}).get("game") or "").strip()
+    camp = campaign.of(preset)
+    if (camp.get("games") and seen_game and not campaign.game_ok(camp, seen_game)
+            and not game_key(seen_game).startswith("gta") and "autre_jeu" not in risks):
+        risks = [*risks, "autre_jeu"]
+        log(f"Jeu à l'écran : « {seen_game} », pas celui de la campagne : clip refusé.")
     if ai_cam and cfg["edit"].get("check_facecam", True):
         fitted = detect.fit_webcam(c.src, start, end, ai_cam)
         if fitted is None:

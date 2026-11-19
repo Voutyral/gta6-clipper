@@ -14,6 +14,7 @@ RISK_LABELS = {
     "spoiler": "révélation majeure de l'histoire (Rockstar les fait retirer)",
     "haine": "propos haineux (insultes racistes ou homophobes) : retiré par TikTok et YouTube",
     "bande_annonce": "bande-annonce, vidéo officielle ou fuite au lieu du jeu en direct",
+    "autre_jeu": "le jeu à l'écran n'est pas celui de la campagne",
 }
 ALLOWED_NOTES = {   # risques permis par une campagne : signalés, sans bloquer
     "spoiler": "moment d'histoire : « SPOILER » sur la couverture et dans la légende, rien n'est dévoilé",

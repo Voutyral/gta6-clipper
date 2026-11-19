@@ -207,3 +207,20 @@ def test_dom_brief_disclosure_length_and_refused_music(tmp_path):
     refused = verify.verify(clip, facts={"captions": 3}, risks=["musique"], cfg=cfg, rights_ok=True,
                             block=set(DOM["strict_risks"]))
     assert not refused["go"] and "refusé par la campagne" in refused["problems"][0]
+
+
+def test_campaign_refuses_a_clip_showing_another_game():
+    from clipper import verify
+    cfg = load_config()
+    cand = Candidate(Path("a.mp4"), 0.0, 30.0, None, 1.0, 0.0, locked=True)
+    info = {"title": "zombies", "webpage_url": "https://kick.com/dasgasd3m/clips/x", "channel": "dasgasd3m"}
+    req = ClipRequest(url="https://kick.com/dasgasd3m/clips/x")
+
+    def plan(game):
+        return build_plan(cand, {"score": 8, "risks": [], "game": game}, [], req, info, cfg, DOM, "dasgasd3m on Kick", 0)
+    assert "autre_jeu" in plan("Into the Dead: Our Darkest Days").risks      # catégorie GTA VI, image d'un autre jeu
+    assert "autre_jeu" in verify.RISK_LABELS                                   # bloquant
+    for ok in ("GTA 6", "Grand Theft Auto VI", "GTA 5", ""):                   # GTA 5 : l'IA confond, on garde
+        assert "autre_jeu" not in plan(ok).risks, ok
+    free = build_plan(cand, {"score": 8, "risks": [], "game": "Fortnite"}, [], req, info, cfg, {}, "@x", 0)
+    assert "autre_jeu" not in free.risks                                       # hors campagne : tous les jeux

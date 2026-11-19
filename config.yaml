@@ -124,4 +124,6 @@ gallery:
   max_mb: 900                       # GitHub Pages refuse plus de 1 Go : les plus anciens restent dehors
   hide:                             # clips à ne jamais montrer (nom du fichier, sans .mp4)
     - 20261118-030954-suryanshexd-00   # stream en hindi, sans GTA à l'image
+    - 20261119-072802-dasgasd3m-40     # Dom : jeu de zombies sous la catégorie GTA VI (refusé par la campagne)
+    - 20261119-184808-dasgasd3m-40     # même clip, refait le 20/11
   schedule_utc: ["01:17", "03:17", "05:17", "07:17", "09:17", "11:17", "13:17", "15:17", "17:17", "19:17", "21:17", "23:17"]   # comme la ligne cron de chasse.yml
