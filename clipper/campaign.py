@@ -15,6 +15,7 @@ SPOILER_HOOK = {"fr": "ALERTE SPOILER", "en": "SPOILER WARNING"}
 SPOILER_LINE = {"fr": "⚠️ Spoiler : moment de l'histoire de GTA 6.",
                 "en": "⚠️ Spoiler warning: GTA 6 story moment."}
 OFF = ("off", "false", "no", "non", "0", "none")
+YT_TITLE_MAX = 100   # titre YouTube, Shorts compris : au delà, YouTube refuse
 
 
 def _dt(text) -> datetime | None:
@@ -154,7 +155,8 @@ def card(preset: dict | None) -> dict:
             "platforms": [str(p) for p in camp.get("platforms") or []],
             "opens": str(camp.get("opens") or ""), "closes": str(camp.get("closes") or ""),
             "submit_minutes": int(camp.get("submit_minutes") or 30),
-            "reminders": [str(r) for r in camp.get("reminders") or [] if str(r).strip()]}
+            "reminders": [str(r) for r in camp.get("reminders") or [] if str(r).strip()],
+            "title_tags": [str(t).strip() for t in camp.get("title_tags") or [] if str(t).strip()]}
 
 
 def tuned(cfg: dict, preset: dict | None) -> dict:
@@ -170,6 +172,29 @@ def caption(preset: dict | None, title: str, description: str) -> str:
     disclosure = str((preset or {}).get("disclosure") or "").strip()
     head = f"{disclosure} · {title}" if disclosure else title
     return f"{head}\n\n{description}"
+
+
+def _units(text: str) -> int:
+    """Longueur comptée comme YouTube (un emoji vaut deux caractères)."""
+    return len(text.encode("utf-16-le")) // 2
+
+
+def yt_title(head: str, tags: list[str] | None = None, limit: int = YT_TITLE_MAX) -> str:
+    """Titre à coller sur YouTube : la première ligne de la légende (mention de partenariat comprise),
+    puis les hashtags exigés par la campagne, le tout coupé sur un mot pour tenir dans la limite."""
+    head = " ".join(str(head or "").split())
+    tail = " ".join(t for t in (tags or []) if t and t.lower() not in head.lower())
+    if tail and _units(tail) + 1 > limit // 3:      # des hashtags trop longs ne mangent pas le titre
+        tail = ""
+    room = limit - (_units(tail) + 1 if tail else 0)
+    if _units(head) > room:
+        words = head.split(" ")
+        while len(words) > 1 and _units(" ".join(words)) + 1 > room:
+            words.pop()
+        head = " ".join(words).rstrip(" ·,;:") + "…"
+        while _units(head) > room:                  # un seul mot géant
+            head = head[:-2] + "…"
+    return f"{head} {tail}" if tail else head
 
 
 def off(value) -> bool:

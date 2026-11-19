@@ -111,6 +111,8 @@ def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
     shown = {id(c) for c in keep_latest([c for c, _ in pairs], gc.get("hide"))}
     pairs = [(c, a) for c, a in pairs if id(c) in shown]
     pairs.sort(key=lambda ca: _when(ca[0].get("made_at", "")), reverse=True)
+    camps = active_campaigns()
+    by_name = {c["name"]: c for c in camps}
     clips = []
     for card, assets in pairs[:max_clips]:
         size = float(card.get("size_mb") or 30)
@@ -136,6 +138,11 @@ def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
         if not ok:
             continue
         card = dict(card, src=f"c/{card['file']}", poster=f"c/{card['thumb']}" if card.get("thumb") else "")
+        # Titre YouTube (100 caractères max) : 1re ligne de la légende de campagne, sinon le titre.
+        # Les hashtags exigés viennent de streamers.yaml, donc les clips déjà faits en profitent aussi.
+        camp = by_name.get((card.get("campaign") or {}).get("name")) or card.get("campaign") or {}
+        head = (card.get("caption") or "").split("\n", 1)[0].strip() or card.get("title") or ""
+        card["yt_title"] = campaign.yt_title(head, camp.get("title_tags"))
         clips.append(card)
         used_mb += size
     shutil.rmtree(tmp, ignore_errors=True)
@@ -147,7 +154,7 @@ def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
             shutil.copy(FONTS / f, out / "fonts" / f)
     (out / ".nojekyll").write_text("")
     data = {"generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "schedule_utc": gc.get("schedule_utc") or [], "campaigns": active_campaigns(), "clips": clips}
+            "schedule_utc": gc.get("schedule_utc") or [], "campaigns": camps, "clips": clips}
     (out / "clips.json").write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     log(f"Galerie : {len(clips)} clip(s) dans {out}")
     return len(clips)

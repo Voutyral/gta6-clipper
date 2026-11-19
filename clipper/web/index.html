@@ -211,9 +211,12 @@
     transform: translate(-50%, calc(100% + 60px)); transition: transform .25s cubic-bezier(.2, .8, .2, 1);
     background: var(--paper); color: var(--text-on-paper); font-family: var(--mono); font-weight: 600;
     font-size: 13px; padding: 12px 16px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
-    max-width: 92vw; pointer-events: none; }   /* ne bloque jamais un appui sur les boutons en dessous */
+    width: max-content; max-width: 92vw; pointer-events: none; }   /* ne bloque jamais un appui sur les boutons en dessous */
   .toast.show { transform: translate(-50%, 0); }
   .selecting .toast { bottom: calc(var(--safe-bottom) + 100px); }   /* au dessus de la barre de sélection */
+  /* Fiche ouverte : le message passe en haut, sous « Fermer », pour ne pas cacher les boutons du bas. */
+  .sheet-open .toast { bottom: auto; top: calc(var(--safe-top) + 64px); transform: translate(-50%, calc(-100% - 140px)); }
+  .sheet-open .toast.show { transform: translate(-50%, 0); }
   .selecting main { padding-bottom: calc(var(--safe-bottom) + 120px); }
 
   @media (prefers-reduced-motion: reduce) { .ticket, .tile { animation: none; opacity: 1; transform: none; }
@@ -443,6 +446,8 @@
     // Campagne : légende complète (titre, crédit exigé, hashtags). Sinon titre et hashtags seulement.
     const caption = c.caption || [c.title, (c.description || "").split("\n").filter((l) => l.startsWith("#")).join(" ")]
       .filter(Boolean).join("\n\n");
+    // Titre YouTube préparé par la galerie (100 caractères max, « Paid partnership » en tête pour une campagne).
+    const ytTitle = c.yt_title || (c.title || "").slice(0, 100);
     const card = el("article", { class: "ticket" + (posted ? " posted" : ""), style: `animation-delay:${Math.min(i, 6) * 70}ms` });
     const video = el("video", { src: c.src, poster: c.poster || undefined, controls: "", playsinline: "", preload: "none" });
     const screen = el("div", { class: "screen" }, video,
@@ -477,7 +482,8 @@
       el("div", { class: "actions" },
         shareButton(c),
         el("button", { class: "btn", type: "button",
-                       onclick: (e) => copy(c.title || "", e.currentTarget, "Titre copié", "✓ Copié") }, "Titre"),
+                       onclick: (e) => copy(ytTitle, e.currentTarget, `Titre YouTube copié (${ytTitle.length}/100)`, "✓ Copié") },
+           "Titre YT"),
         el("button", { class: "btn", type: "button",
                        onclick: (e) => copy(caption, e.currentTarget, "Légende copiée", "✓ Copiée") }, "Légende"),
         doneBtn));
@@ -577,6 +583,7 @@
     sheet.replaceChildren(close, ticket(c, 0));
     sheet.hidden = false; sheet.scrollTop = 0;
     document.body.style.overflow = "hidden";
+    document.body.classList.add("sheet-open");
     history.pushState({ sheet: 1 }, "");
   }
   function closeSheet() {
@@ -584,6 +591,7 @@
     sheet.querySelectorAll("video").forEach((v) => v.pause());
     sheet.hidden = true; sheet.replaceChildren();
     document.body.style.overflow = "";
+    document.body.classList.remove("sheet-open");
     render();
   }
   window.addEventListener("popstate", closeSheet);

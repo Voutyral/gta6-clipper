@@ -158,6 +158,38 @@ def test_gallery_lists_running_campaigns_as_sections(tmp_path):
     assert gallery.active_campaigns([over, {"name": "Bob"}]) == []          # terminée : plus de section
 
 
+def test_youtube_title_fits_100_characters_and_keeps_the_disclosure_first():
+    assert campaign.card(DOM)["title_tags"] == ["#dasgasdom3"]
+    head = campaign.caption(DOM, "Dasgas Dom steals a police car in GTA 6", "D").split("\n")[0]
+    assert campaign.yt_title(head, ["#dasgasdom3"]) == "Paid partnership · Dasgas Dom steals a police car in GTA 6 #dasgasdom3"
+    long = "Paid partnership · " + " ".join(["Dasgas Dom reacts to the craziest GTA 6 moment"] * 3)
+    t = campaign.yt_title(long, ["#dasgasdom3"])
+    assert len(t) <= 100 and t.startswith("Paid partnership · Dasgas Dom") and t.endswith("… #dasgasdom3")
+    assert " ".join(t.split()[:-1]).rstrip("…") in long                    # coupé sur un mot entier
+    assert campaign.yt_title(head + " #DasgasDom3", ["#dasgasdom3"]).count("#") == 1   # pas de doublon
+    assert campaign._units(campaign.yt_title("🔥" * 60)) <= 100             # un emoji compte double
+    assert campaign.yt_title("Clip court") == "Clip court"
+
+
+def test_gallery_gives_each_clip_a_youtube_title(tmp_path):
+    import json
+
+    from clipper import gallery
+    src = tmp_path / "clips"
+    src.mkdir()
+    cards = {"dom": {"title": "Dom steals a car", "caption": "Paid partnership · Dom steals a car\n\nD\n\n#ad #dasgasdom3",
+                     "campaign": dict(campaign.card(DOM), name="Campagne de test")},
+             "free": {"title": "Squeezie rate son saut " * 6}}
+    for name, card in cards.items():
+        (src / f"{name}.mp4").write_bytes(b"\x00")
+        (src / f"{name}.json").write_text(json.dumps(dict(card, file=f"{name}.mp4", go=True,
+                                                          made_at="2026-11-19T18:00:00+00:00")), encoding="utf-8")
+    gallery.build(tmp_path / "site", load_config(), from_dir=src)
+    got = {c["file"]: c["yt_title"] for c in json.loads((tmp_path / "site" / "clips.json").read_text())["clips"]}
+    assert got["dom.mp4"] == "Paid partnership · Dom steals a car #dasgasdom3"
+    assert len(got["free.mp4"]) <= 100 and got["free.mp4"].startswith("Squeezie rate son saut")
+
+
 def test_dom_brief_disclosure_length_and_refused_music(tmp_path):
     import subprocess
 
