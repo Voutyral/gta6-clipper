@@ -86,7 +86,7 @@ def test_replays_are_clipped_after_the_viewer_clips_and_never_while_live():
     assert [f.id for _, f, _, _ in ranked] == ["k1", "vod-1"]
     assert "rediffusion" in ranked[1][3] and stats == {"live encore en cours (la rediffusion viendra après)": 1}
     req = hunt.to_request(vod, DOM, cfg)
-    assert req.count == 6 and req.meta["duration"] == 4 * 3600 and req.langs == ["en"]
+    assert req.count == int(campaign.of(DOM)["vod_clips"]) and req.meta["duration"] == 4 * 3600 and req.langs == ["en"]
 
 
 def test_replay_that_cannot_be_downloaded_yet_is_retried(monkeypatch, tmp_path):
