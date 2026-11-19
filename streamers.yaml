@@ -21,7 +21,7 @@ streamers:
   - name: Dasgas Dom
     kick: dasgasd3m                    # chaîne Kick suivie par la chasse
     credit: "dasgasd3m on Kick"        # crédit exigé à l'écran, lisible sur un téléphone
-    credit_prefix: "Paid partnership ·"   # → « Paid partnership · dasgasd3m on Kick » en bas de tout le clip
+    credit_prefix: ""                  # à l'écran : « dasgasd3m on Kick » seul (la mention de partenariat est dans la légende et le réglage de la plateforme)
     disclosure: "Paid partnership"     # en tête de la légende, là où on le voit (exigé)
     cta: "WATCH DOM LIVE ON KICK.COM/DASGASD3M"   # fin du clip : renvoyer vers son stream
     language: en                       # Dom parle anglais : sous-titres, accroche, titre et légende en anglais
@@ -53,7 +53,7 @@ streamers:
       vod_clips: 15                                # clips que l'outil tire lui-même de la rediffusion (stream de 12 h et plus)
       # 1 $ les 1 000 vues, payé seulement à partir de 10 000 vues sur un même post, 100 $ max par post,
       # budget total 1 000 $. Deux posts ne s'additionnent pas.
-      reminders: ["« Paid partnership » bien visible et réglage contenu commercial activé",
+      reminders: ["« Paid partnership » en tête de la légende et réglage contenu commercial activé",
                   "payé seulement à partir de 10 000 vues sur un même post", "un post = une seule campagne"]
       brief: |
         Streamer: Dasgas Dom (Kick: dasgasd3m), American, speaks English, makes adult jokes.
