@@ -311,6 +311,11 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
         flags.add("plein_cadre")
     # Webcam vue par l'IA : on vérifie qu'il y a bien un visage dans son cadre et on recentre dessus
     # (le 19/11, 5 clips sur 23 montraient le chat, un mur ou un visage coupé au bord).
+    # Insulte haineuse prononcée dans le passage (que l'IA l'ait vue ou non) : clip refusé.
+    if "haine" not in risks and any(captions.is_slur(w.get("raw", "")) for w in c.words
+                                    if start <= float(w.get("s", -1)) < end):
+        risks = [*risks, "haine"]
+        log("Insulte haineuse prononcée dans le passage : clip refusé (risque « haine »).")
     if ai_cam and cfg["edit"].get("check_facecam", True):
         fitted = detect.fit_webcam(c.src, start, end, ai_cam)
         if fitted is None:

@@ -55,6 +55,22 @@ def display_word(raw: str) -> str:
     return word if any(ch.isalnum() for ch in word) else ""
 
 
+# Insultes racistes, homophobes, transphobes ou validistes : TikTok et YouTube retirent les clips
+# qui les montrent, et une campagne payée les exclut. Un clip où l'une d'elles est prononcée est
+# refusé (risque « haine »), et le mot n'est jamais écrit en sous-titre (« N**** »).
+# Le 19/11, un clip de Dom affichait « NIGGA » en sous-titre : l'IA ne l'avait pas signalé.
+SLURS = re.compile(
+    r"^(nigg(a|ah|as|az|er|ers|uh|uhs)?|niggaz|negro(e?s)?|n[eè]gres?|n[ée]gros?|fag|fags|faggots?|"
+    r"retard(s|ed)?|trann(y|ies)|chinks?|spics?|kikes?|wetbacks?|p[ée]d[ée]s?|tarlouzes?|"
+    r"gouines?|bougnoules?|youpins?|chinetoques?|bicots?)$")
+
+
+def is_slur(raw: str) -> bool:
+    """Vrai si le mot (tel que transcrit, ponctuation comprise) est une insulte haineuse."""
+    w = re.sub(r"[^\w'-]", "", str(raw).lower()).strip("'-")
+    return bool(w) and bool(SLURS.match(w))
+
+
 def normalize_words(words: list[dict], dur: float) -> list[dict]:
     """Nettoie les mots bruts de la transcription et garantit des temps croissants."""
     out = []
@@ -62,6 +78,8 @@ def normalize_words(words: list[dict], dur: float) -> list[dict]:
         disp = display_word(w.get("raw", ""))
         if not disp:
             continue
+        if is_slur(w.get("raw", "")):
+            disp = disp[0] + "*" * max(3, len(disp) - 1)      # jamais écrite en entier à l'écran
         s = min(max(0.0, float(w["s"])), dur)
         e = min(max(s + 0.04, float(w["e"])), dur + 0.3)
         end_char = w["raw"].rstrip()[-1:]

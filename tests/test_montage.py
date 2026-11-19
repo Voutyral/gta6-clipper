@@ -270,3 +270,25 @@ def test_ai_webcam_frame_is_checked_and_recentred_on_the_face(monkeypatch):
     assert moved["x"] < 0.6 < moved["x"] + moved["w"] and moved["w"] >= 0.3 and moved["h"] >= 0.36
     spot["face"] = None                # aucun visage : cadre douteux (le chat, un mur)
     assert detect.fit_webcam("x.mp4", 0.0, 20.0, box) is None
+
+
+def test_hate_slurs_are_masked_on_screen_and_refuse_the_clip():
+    for bad in ("nigga", "Niggas,", "NIGGER", "faggot", "pédé", "PÉDÉS !", "retarded", "chinks"):
+        assert captions.is_slur(bad), bad
+    for ok in ("night", "Niger", "Nigeria", "bigger", "negroni", "spice", "pédale", "fuck", "putain"):
+        assert not captions.is_slur(ok), ok
+    shown_words = captions.normalize_words([{"raw": "nigga", "s": 0.0, "e": 0.3}, {"raw": "what", "s": 0.4, "e": 0.6}], 5)
+    assert [w["w"] for w in shown_words] == ["N****", "WHAT"]
+    from pathlib import Path
+
+    from clipper.pipeline import Candidate, build_plan
+    from clipper.request import ClipRequest
+    words = [{"raw": "yo", "s": 2.0, "e": 2.3}, {"raw": "nigga", "s": 2.4, "e": 2.8}, {"raw": "look", "s": 3.0, "e": 3.3}]
+    cand = Candidate(Path("a.mp4"), 0.0, 25.0, None, 1.0, 0.0, locked=True, words=words)
+    info = {"title": "GTA 6", "webpage_url": "https://kick.com/x", "channel": "Dom"}
+    plan = build_plan(cand, {"score": 8, "risks": []}, [], ClipRequest(url="https://kick.com/x"), info,
+                      load_config(), {}, "@x", 0)
+    assert "haine" in plan.risks
+    clean = Candidate(Path("a.mp4"), 0.0, 25.0, None, 1.0, 0.0, locked=True, words=words[:1])
+    assert "haine" not in build_plan(clean, {"score": 8}, [], ClipRequest(url="https://kick.com/x"), info,
+                                     load_config(), {}, "@x", 0).risks
