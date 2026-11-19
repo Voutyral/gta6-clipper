@@ -302,8 +302,8 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
     # immobile), que l'IA n'a pas signalés. Désactivable par streamer (`tighten: off`).
     if "nocut" not in flags and ed.get("jump_cuts", True) and cuts.tighten_on(ed, preset):
         plan_cuts = cuts.tighten(c.src, start, end, c.words, ed, plan_cuts)
-    if ev and ev.get("captions_on_screen") is True:
-        flags.add("nosub")   # le stream affiche déjà ses sous-titres : pas de deuxième ligne par-dessus
+    # Les sous-titres restent toujours, même si l'image en montre déjà : le 19/11, l'IA prenait les
+    # dialogues sous-titrés de GTA 6 pour ceux du streamer, et 4 clips de Dom sur 7 sortaient muets.
     # Sans réponse de l'IA (quota épuisé…), on ne sait pas où est la webcam : l'image du jeu reste
     # entière, pour ne jamais rogner une webcam qu'on n'a pas vue. (Chercher un visage dans toute
     # l'image a été essayé le 19/11 : les visages de GTA 6 passent pour la webcam.)
@@ -350,6 +350,8 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
         title = f"{who}{sep}{base}" if who and who.lower() not in base.lower() else base
     if not tags:
         tags = [meta["game"], "gaming", "clip"] + ([credit.lstrip("@")] if credit else [])
+    if captions.censor_on(cfg):   # titre et description publiés : gros mots masqués comme à l'écran
+        title, desc = captions.censor_text(title), captions.censor_text(desc)
     return Plan(
         src=c.src, start=start, end=end, words=c.words, peaks=peaks, hook=clean_hook(hook),
         context=context.strip()[:60], credit=credit, title=" ".join(title.split())[:95],

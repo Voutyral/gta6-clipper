@@ -201,6 +201,13 @@
   .btn.copied { background: var(--sea); border-color: var(--sea); color: var(--ink); animation: pop .3s ease-out; }
   .btn.failed { background: var(--danger); border-color: var(--danger); color: #fff; animation: pop .3s ease-out; }
   @keyframes pop { 40% { transform: scale(1.08); } }
+  /* Texte à copier à la main, si le téléphone refuse la copie automatique. */
+  .copybox { position: fixed; left: 12px; right: 12px; bottom: calc(var(--safe-bottom) + 12px); z-index: 50;
+    display: grid; gap: 10px; padding: 14px; border-radius: 16px; background: var(--paper);
+    color: var(--text-on-paper); font-family: var(--mono); font-size: 13px; box-shadow: 0 20px 60px rgba(0, 0, 0, .6); }
+  .copybox p { margin: 0; line-height: 1.4; }
+  .copybox-text { box-sizing: border-box; width: 100%; min-height: 170px; padding: 10px; border-radius: 10px;
+    border: 2px solid var(--text-on-paper); background: #fff; color: #111; font: 16px/1.35 var(--body); }
 
   .empty { text-align: center; margin: 70px 8px; font-family: var(--mono); color: var(--muted); line-height: 1.6; }
   .empty strong { display: block; font-family: var(--display); font-weight: 400; font-size: 34px;
@@ -286,17 +293,41 @@
     toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2200);
   }
 
-  // Copie le texte puis le confirme sur le bouton touché (vert « ✓ Copié » pendant 2 s) et par un message en bas.
+  // Copie de secours. Sur iPhone, select() ne sélectionne rien dans un champ en lecture seule :
+  // il faut une vraie sélection (range) et setSelectionRange.
+  function legacyCopy(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;font-size:16px";
+    document.body.appendChild(ta);
+    const sel = window.getSelection(), range = document.createRange();
+    range.selectNodeContents(ta); sel.removeAllRanges(); sel.addRange(range);
+    ta.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    ta.remove(); sel.removeAllRanges();
+    return ok;
+  }
+
+  // Dernier recours si le téléphone bloque toute copie : le texte s'affiche, prêt pour un appui long.
+  function showText(text) {
+    document.querySelectorAll(".copybox").forEach((b) => b.remove());
+    const box = el("textarea", { class: "copybox-text", readonly: "" });
+    box.value = text;
+    const wrap = el("div", { class: "copybox", role: "dialog", "aria-label": "Texte à copier" },
+      el("p", {}, "Ton téléphone a bloqué la copie : appui long sur le texte, « Tout sélectionner », puis « Copier »."),
+      box, el("button", { class: "btn", type: "button", onclick: () => wrap.remove() }, "Fermer"));
+    document.body.appendChild(wrap);
+    box.focus(); box.setSelectionRange(0, text.length);
+  }
+
+  // Copie le texte puis le confirme sur le bouton touché (vert « ✓ Copié » pendant 2 s) et par un message.
   async function copy(text, btn, done, mark) {
     let ok = true;
     try {
       await navigator.clipboard.writeText(text);
     } catch (e) {
-      const ta = document.createElement("textarea");
-      ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
-      document.body.appendChild(ta); ta.select();
-      try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
-      ta.remove();
+      ok = legacyCopy(text);
     }
     const label = btn.dataset.label || (btn.dataset.label = btn.textContent);
     clearTimeout(btn._reset);
@@ -305,7 +336,8 @@
     btn.classList.add(ok ? "copied" : "failed");
     btn.textContent = ok ? mark : "Raté";
     btn._reset = setTimeout(() => { btn.classList.remove("copied", "failed"); btn.textContent = label; }, 2000);
-    toast(ok ? done : "Copie impossible, retouche le bouton");
+    if (!ok) showText(text);
+    toast(ok ? done : "Copie bloquée : texte affiché en bas");
   }
 
   function ago(iso) {

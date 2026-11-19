@@ -71,6 +71,40 @@ def is_slur(raw: str) -> bool:
     return bool(w) and bool(SLURS.match(w))
 
 
+# Gros mots anglais et français : masqués à l'écran et dans le titre (« F****** »), sauf
+# `captions.censor: false`. Les mots à double sens restent écrits (« bite » est un verbe en anglais).
+SWEAR_WORDS = {
+    "bitch", "bitches", "bitchy", "bitchass", "asshole", "assholes", "dick", "dicks", "dickhead",
+    "dickheads", "cock", "cocks", "cocksucker", "cocksuckers", "pussy", "pussies", "cunt", "cunts",
+    "bastard", "bastards", "whore", "whores", "slut", "sluts", "wanker", "wankers", "twat", "twats",
+    "putain", "putains", "ptn", "merde", "merdes", "merdique", "connard", "connards", "connarde", "connasse",
+    "connasses", "salope", "salopes", "salopard", "pute", "putes", "enculé", "enculée", "enculés", "encule",
+    "enculer", "enculées", "nique", "niquer", "niqué", "niquez", "niquent", "ntm", "fdp", "chier", "couille",
+    "couilles", "foutre", "enfoiré", "enfoirée", "enfoirés", "bâtard", "bâtarde", "bâtards", "batard",
+    "batards",
+}
+SWEAR_RE = re.compile(r"^(mother-?)?f+u+c+k+\w*$|^(bull|horse|dip|chicken)?shit\w*$|^motherf\w+$")
+
+
+def is_swear(raw: str) -> bool:
+    w = re.sub(r"[^\w'-]", "", str(raw).lower()).strip("'-")
+    return bool(w) and (w in SWEAR_WORDS or bool(SWEAR_RE.match(w)))
+
+
+def mask(word: str) -> str:
+    """« FUCKING » devient « F****** » : la première lettre reste, le reste passe en étoiles."""
+    return word[:1] + "*" * max(3, len(word) - 1)
+
+
+def censor_text(text: str) -> str:
+    """Masque les gros mots d'une phrase (accroche, titre), ponctuation et majuscules gardées."""
+    return re.sub(r"[\w'’]+", lambda m: mask(m.group(0)) if is_swear(m.group(0)) else m.group(0), text or "")
+
+
+def censor_on(cfg: dict) -> bool:
+    return bool((cfg.get("captions") or {}).get("censor", True))
+
+
 def normalize_words(words: list[dict], dur: float) -> list[dict]:
     """Nettoie les mots bruts de la transcription et garantit des temps croissants."""
     out = []
@@ -208,6 +242,9 @@ def build_ass(words: list[dict], *, hook: str, context: str, credit: str, total:
     `cta` : appel à l'action d'une campagne (« SUBSCRIBE ON YOUTUBE »), affiché les dernières secondes.
     """
     ed = cfg["edit"]
+    if censor_on(cfg):   # gros mots masqués partout où on les lit : sous-titres, accroche, contexte
+        words = [dict(w, w=mask(w["w"])) if is_swear(w.get("raw") or w.get("w", "")) else w for w in words]
+        hook, context = censor_text(hook), censor_text(context)
     lines = [HEADER.format(hook_box=cfg["captions"].get("highlight", "&H0000E5FF"))]
     hook_end = min(total, hook_until if hook_until is not None else float(ed.get("hook_seconds", 3.5)))
     hook_lines = balanced(esc(strip_emoji(hook).upper()), 18) if hook else []

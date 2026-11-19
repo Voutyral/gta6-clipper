@@ -104,7 +104,8 @@ def test_too_many_ai_cuts_keep_the_longest_instead_of_none():
 
 def test_ai_prompt_still_formats_and_asks_for_the_new_fields():
     text = ai.EVAL_SYSTEM.format(game="GTA 6", min_s=15, max_s=45, lang="fr")
-    assert "captions_on_screen" in text and "première seconde" in text and "Barème" in text
+    assert "première seconde" in text and "Barème" in text
+    assert "captions_on_screen" not in text           # plus de retrait des sous-titres sur l'avis de l'IA
 
 
 @pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg absent")
@@ -224,6 +225,10 @@ def test_unknown_webcam_keeps_the_whole_game_picture():
     assert "plein_cadre" in blind.flags                                          # l'IA n'a pas répondu
     seen = build_plan(cand, {"score": 7}, [], ClipRequest(url="https://x.tv/v"), info, load_config(), {}, "@Bob", 0)
     assert "plein_cadre" not in seen.flags                                       # l'IA a regardé : pas de webcam
+    # Dialogues de GTA 6 sous-titrés à l'écran : les paroles du streamer restent sous-titrées.
+    talk = build_plan(cand, {"score": 7, "captions_on_screen": True}, [], ClipRequest(url="https://x.tv/v"), info,
+                      load_config(), {}, "@Bob", 0)
+    assert "nosub" not in talk.flags
     assert "scale=1620:-2" in layout_chain("0:v", "v0", "blur", ed, {}, "60", "0")       # zoom 1.5 : côtés rognés
     assert "scale=1080:-2" in layout_chain("0:v", "v0", "blur", dict(ed, zoom=1.0), {}, "60", "0")
 
@@ -292,3 +297,29 @@ def test_hate_slurs_are_masked_on_screen_and_refuse_the_clip():
     clean = Candidate(Path("a.mp4"), 0.0, 25.0, None, 1.0, 0.0, locked=True, words=words[:1])
     assert "haine" not in build_plan(clean, {"score": 8}, [], ClipRequest(url="https://kick.com/x"), info,
                                      load_config(), {}, "@x", 0).risks
+
+
+def test_swear_words_are_masked_on_screen_and_in_the_title():
+    for bad in ("fucking", "SHIT!", "fuckin'", "Motherfucker", "bullshit", "bitch", "putain", "Enculé", "merde"):
+        assert captions.is_swear(bad), bad
+    for ok in ("bite", "class", "assassin", "shoot", "duck", "Dom", "shift", "con", "chat"):
+        assert not captions.is_swear(ok), ok
+    assert captions.censor_text("OH SHIT, he said fuck-up!") == "OH S***, he said f***-up!"
+    cfg = load_config()
+    words = said("fuck that guy")
+    ass = captions.build_ass(words, hook="OH SHIT", context="Putain de voiture", credit="", total=3.0, cfg=cfg)
+    assert "F***" in ass and "S***" in ass and "P*****" in ass
+    assert "FUCK" not in ass and "SHIT" not in ass and "Putain" not in ass
+    assert [w["w"] for w in words][0] == "FUCK"                     # mots d'origine intacts (coupes, insultes)
+    off = dict(cfg, captions=dict(cfg["captions"], censor=False))
+    raw = captions.build_ass(words, hook="OH SHIT", context="", credit="", total=3.0, cfg=off)
+    assert "FUCK" in raw and "SHIT" in raw
+    from pathlib import Path
+
+    from clipper.pipeline import Candidate, build_plan
+    from clipper.request import ClipRequest
+    cand = Candidate(Path("a.mp4"), 0.0, 25.0, None, 1.0, 0.0, locked=True)
+    info = {"title": "GTA 6", "webpage_url": "https://kick.com/x", "channel": "Dom"}
+    ev = {"score": 8, "risks": [], "title": "Dom says fuck that guy", "description": "He yells shit at a cop."}
+    plan = build_plan(cand, ev, [], ClipRequest(url="https://kick.com/x"), info, cfg, {}, "@x", 0)
+    assert plan.title == "Dom says f*** that guy" and "s*** at a cop" in plan.description

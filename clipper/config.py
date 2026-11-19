@@ -73,6 +73,7 @@ DEFAULTS: dict = {
         "max_words": 3,
         "max_chars": 13,
         "highlight": "&H0000E5FF",
+        "censor": True,
     },
     "ai": {
         "enabled": True,
