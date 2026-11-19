@@ -171,3 +171,89 @@ def black_lead(path: str | Path, ss: float, dur: float = 4.0) -> float:
             return end if start < 0.05 else 0.0
     return 0.0
 
+
+
+def _gray_region(path: str | Path, t: float, region: dict, width: int = 640) -> np.ndarray | None:
+    """Image en gris de la zone `region` (fractions x, y, w, h) à l'instant t, large de `width` px."""
+    x, y, w, h = (max(0.0, float(region[k])) for k in ("x", "y", "w", "h"))
+    height = max(32, int(round(width * h / max(w, 1e-3) * 9 / 16 / 2)) * 2)
+    cmd = ["ffmpeg", "-v", "error", "-nostdin", "-ss", f"{max(0.0, t):.3f}", "-i", str(path), "-frames:v", "1", "-an",
+           "-vf", f"crop=iw*{w:.4f}:ih*{h:.4f}:iw*{x:.4f}:ih*{y:.4f},scale={width}:{height},format=gray",
+           "-f", "rawvideo", "-"]
+    try:
+        p = subprocess.run(cmd, capture_output=True, timeout=60, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if len(p.stdout or b"") < width * height:
+        return None
+    return np.frombuffer(p.stdout[: width * height], dtype=np.uint8).reshape(height, width)
+
+
+def _face_finders():
+    """Détecteurs de visages d'OpenCV 4 (de face, de face bis, de profil) ; [] s'ils manquent."""
+    try:
+        import cv2
+    except ImportError:
+        return []
+    root = Path(getattr(getattr(cv2, "data", None), "haarcascades", "") or "")
+    out = []
+    for name in ("haarcascade_frontalface_default.xml", "haarcascade_frontalface_alt2.xml",
+                 "haarcascade_profileface.xml"):
+        if (root / name).exists():
+            out.append((name, cv2.CascadeClassifier(str(root / name))))
+    return out
+
+
+def fit_webcam(path: str | Path, start: float, end: float, box: dict, n: int = 8):
+    """Vérifie le cadre de webcam donné par l'IA et le recentre sur le visage du streamer.
+
+    L'IA se trompe parfois de cadre (le chat, un mur) ou coupe le visage au bord. On cherche un
+    visage dans son cadre élargi de moitié de chaque côté, sur `n` images prises après l'accroche.
+    Renvoie :
+      - le cadre recentré sur le visage (tête et épaules, proportions du bandeau du haut) ;
+      - None si un visage n'apparaît pas sur au moins la moitié des images (cadre douteux) ;
+      - le cadre de l'IA tel quel si les détecteurs ne sont pas installés.
+    """
+    finders = _face_finders()
+    if not finders:
+        return box
+    import cv2
+
+    bx, by, bw, bh = (float(box[k]) for k in ("x", "y", "w", "h"))
+    rx, ry = max(0.0, bx - bw / 2), max(0.0, by - bh / 2)
+    rw, rh = min(1.0, bx + 1.5 * bw) - rx, min(1.0, by + 1.5 * bh) - ry
+    region = {"x": rx, "y": ry, "w": rw, "h": rh}
+    first = start + min(4.0, max(0.0, (end - start) / 3))     # l'accroche couvre le bas de la webcam au début
+    frames, dets = 0, []
+    for i in range(n):
+        img = _gray_region(path, first + (end - 0.3 - first) * i / max(1, n - 1), region)
+        if img is None:
+            continue
+        frames += 1
+        img = cv2.equalizeHist(img)
+        hh, ww = img.shape
+        small = max(24, int(min(hh, ww) * 0.08))
+        faces = []
+        for name, finder in finders:
+            for flip in ((False, True) if "profile" in name else (False,)):
+                pic = cv2.flip(img, 1) if flip else img
+                for (x, y, w, h) in finder.detectMultiScale(pic, 1.08, 5, minSize=(small, small)):
+                    x = ww - x - w if flip else x
+                    faces.append((w * h, x + w / 2, y + h / 2, h))
+        if faces:
+            _, cx, cy, fh = max(faces)                         # le plus grand visage de l'image
+            dets.append((rx + rw * cx / ww, ry + rh * cy / hh, rh * fh / hh))
+    if frames < 4 or len(dets) < max(3, (frames + 1) // 2):
+        return None
+    cx = float(np.median([d[0] for d in dets]))
+    cy = float(np.median([d[1] for d in dets]))
+    fh = float(np.median([d[2] for d in dets]))
+    if bx + 0.2 * bw <= cx <= bx + 0.8 * bw and by + 0.12 * bh <= cy <= by + 0.75 * bh:
+        return box                                             # visage bien placé : le cadre de l'IA est bon
+    # Visage au bord ou hors du cadre : même taille que celui de l'IA (plus grand si le visage
+    # déborde), recentré sur le visage, sans sortir de l'image.
+    h = min(1.0, max(bh, 3.0 * fh))
+    w = min(1.0, max(bw, (1080 / 700) * h * 9 / 16))
+    x = min(max(0.0, cx - w / 2), 1.0 - w)
+    y = min(max(0.0, cy - 0.42 * h), 1.0 - h)
+    return {"x": round(x, 4), "y": round(y, 4), "w": round(w, 4), "h": round(h, 4)}

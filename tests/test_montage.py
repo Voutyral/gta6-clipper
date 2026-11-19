@@ -245,3 +245,28 @@ def test_campaign_cuts_never_go_below_the_brief_minimum():
     assert kept >= 20.0 and plan.cuts == [(12.0, 18.0)]    # la plus longue coupe seulement
     free = build_plan(cand, ev, [], ClipRequest(url="https://kick.com/x"), info, load_config(), {}, "@x", 0)
     assert len(free.cuts) == 2                            # hors campagne : 19 s restent permises
+
+
+def test_ai_webcam_frame_is_checked_and_recentred_on_the_face(monkeypatch):
+    # Faux détecteur : renvoie un visage à une position donnée (en fractions de la zone fouillée).
+    spot = {"face": None}
+    monkeypatch.setattr(detect, "_gray_region", lambda *a, **k: np.zeros((360, 640), dtype=np.uint8))
+
+    class Finder:
+        def detectMultiScale(self, img, *a, **k):
+            if spot["face"] is None:
+                return []
+            fx, fy = spot["face"]
+            return [(int(fx * 640) - 30, int(fy * 360) - 30, 60, 60)]
+
+    monkeypatch.setattr(detect, "_face_finders", lambda: [("haarcascade_frontalface_default.xml", Finder())])
+    pytest.importorskip("cv2")
+    box = {"x": 0.7, "y": 0.0, "w": 0.3, "h": 0.36}
+    # Zone fouillée = cadre élargi de moitié : x de 0,55 à 1, y de 0 à 0,54.
+    spot["face"] = (0.6, 0.3)          # visage au milieu du cadre de l'IA (x 0,82, y 0,16)
+    assert detect.fit_webcam("x.mp4", 0.0, 20.0, box) == box
+    spot["face"] = (0.1, 0.3)          # visage à gauche, hors du cadre (x 0,60) : cadre décalé
+    moved = detect.fit_webcam("x.mp4", 0.0, 20.0, box)
+    assert moved["x"] < 0.6 < moved["x"] + moved["w"] and moved["w"] >= 0.3 and moved["h"] >= 0.36
+    spot["face"] = None                # aucun visage : cadre douteux (le chat, un mur)
+    assert detect.fit_webcam("x.mp4", 0.0, 20.0, box) is None

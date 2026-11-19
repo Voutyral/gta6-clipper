@@ -4,3 +4,4 @@ requests>=2.31
 sherpa-onnx>=1.12
 faster-whisper>=1.1
 yt-dlp[default,curl-cffi]
+opencv-python-headless>=4.10,<5   # vérifie la webcam vue par l'IA (détecteurs de visages fournis avec la version 4)

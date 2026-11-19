@@ -257,6 +257,7 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
     hook, context, title, desc, what = req.hook or "", "", "", "", ""
     tags: list[str] = []
     risks: list[str] = []
+    ai_cam = None            # cadre de webcam venu de l'IA (vérifié plus bas), pas d'un réglage
     if ev:
         try:
             ai_score = float(ev.get("score", 0))
@@ -267,6 +268,7 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
         if (box and cfg["edit"].get("auto_facecam", True) and not req.layout
                 and not preset.get("facecam") and not preset.get("layout")):
             preset = dict(preset, facecam=box, layout="split")
+            ai_cam = box
         if not c.locked:
             try:
                 s, e = float(ev.get("start", 0)), float(ev.get("end", dur))
@@ -303,10 +305,21 @@ def build_plan(c: Candidate, ev: dict | None, peaks: list[float], req: ClipReque
     if ev and ev.get("captions_on_screen") is True:
         flags.add("nosub")   # le stream affiche déjà ses sous-titres : pas de deuxième ligne par-dessus
     # Sans réponse de l'IA (quota épuisé…), on ne sait pas où est la webcam : l'image du jeu reste
-    # entière, pour ne jamais rogner une webcam qu'on n'a pas vue. (Un détecteur de visages a été
-    # essayé le 19/11 : il confond les visages de GTA 6 avec la webcam et rate les vraies.)
+    # entière, pour ne jamais rogner une webcam qu'on n'a pas vue. (Chercher un visage dans toute
+    # l'image a été essayé le 19/11 : les visages de GTA 6 passent pour la webcam.)
     if not ev and not preset.get("facecam") and not preset.get("layout") and not req.layout:
         flags.add("plein_cadre")
+    # Webcam vue par l'IA : on vérifie qu'il y a bien un visage dans son cadre et on recentre dessus
+    # (le 19/11, 5 clips sur 23 montraient le chat, un mur ou un visage coupé au bord).
+    if ai_cam and cfg["edit"].get("check_facecam", True):
+        fitted = detect.fit_webcam(c.src, start, end, ai_cam)
+        if fitted is None:
+            log(f"Webcam de l'IA écartée : aucun visage dans son cadre {ai_cam}. Image entière.")
+            preset = {k: v for k, v in preset.items() if k not in ("facecam", "layout")}
+            flags.add("plein_cadre")
+        elif fitted != ai_cam:
+            log(f"Webcam recentrée sur le visage : {ai_cam} → {fitted}.")
+            preset = dict(preset, facecam=fitted)
     # Moment d'histoire permis par une campagne : alerte sur la couverture, rien de dévoilé,
     # et pas d'aperçu du moment fort en ouverture (il révélerait la chute dès la première image).
     spoiler = bool(preset.get("story_ok")) and "spoiler" in risks
