@@ -124,8 +124,14 @@ jobs:
           git add -A state || true
           if ! git diff --cached --quiet; then
             git commit -q -m "Chasse : clips vus"
-            git pull -q --rebase
-            git push -q
+            # Un autre envoi peut arriver pendant ce temps (le 19/11 à 18:14, la mémoire de la chasse
+            # s'est perdue ainsi) : on recommence quelques fois avant d'abandonner.
+            for i in 1 2 3 4 5; do
+              if git pull -q --rebase && git push -q; then exit 0; fi
+              git rebase --abort 2>/dev/null || true
+              sleep $((i * 4))
+            done
+            exit 1
           fi
 
   gallery:
