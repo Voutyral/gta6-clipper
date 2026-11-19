@@ -90,7 +90,7 @@ DEFAULTS: dict = {
         "period": "24hr",
         "max_per_run": 6,
         "max_per_day": 60,
-        "campaign_max_per_run": 5,
+        "campaign_max_per_run": 8,
         "max_candidates": 16,
         "mix_languages": True,
         "min_ai_score": 4,
