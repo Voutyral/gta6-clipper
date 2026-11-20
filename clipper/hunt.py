@@ -329,10 +329,23 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
         deliver.step_summary(_dry_report(ranked, source_errors, stats))
         return 0
 
-    want = max_clips or int(hc.get("max_per_run", 3))
-    if not max_clips and ranked and campaign.of(ranked[0][2]):
-        want = max(want, int(hc.get("campaign_max_per_run", want)))   # jour de campagne : on en sort plus
-    want = max(want, len(redo_jobs))   # les clips à refaire passent tous, sans prendre la place des autres jours
+    # Deux quotas par passage : les clips de campagne ne prennent jamais la place des autres
+    # streamers. Le 19/11 au soir, Dom (en direct, des centaines de clips Kick) a pris toutes les
+    # places pendant 8 h : 100 clips Dom, aucun autre. Les clips à refaire passent tous.
+    hc_candidates = int(hc.get("max_candidates", 16))
+    camp_q = [r for r in ranked if campaign.of(r[2])]
+    free_q = [r for r in ranked if not campaign.of(r[2])]
+    n_redo_camp = sum(1 for j in redo_jobs if campaign.of(j[2]))
+    want = {True: 0, False: 0}   # True : campagne, False : hors campagne
+    if max_clips:
+        queue = ranked[:max(hc_candidates, max_clips * 2)]   # nombre demandé à la main : un seul total
+    else:
+        if camp_q:
+            want[True] = max(int(hc.get("campaign_max_per_run", hc.get("max_per_run", 3))), n_redo_camp)
+        if not campaign_only:
+            want[False] = max(int(hc.get("max_per_run", 3)), len(redo_jobs) - n_redo_camp)
+        queue = (camp_q[:max(hc_candidates, want[True] * 2)] if want[True] else []) + \
+                (free_q[:max(hc_candidates, want[False] * 2)] if want[False] else [])
     # Plafond du jour pour les clips hors campagne : la chasse passe souvent, la galerie reste lisible.
     day_cap = int(hc.get("max_per_day", 0) or 0)
     free_left = None
@@ -340,16 +353,22 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
         free_left = max(0, day_cap - made_today_total(seen, streamers))
         if free_left == 0:
             log(f"Plafond du jour atteint ({day_cap} clips) : seuls les clips de campagne sont montés.")
-    budget = max(int(hc.get("max_candidates", want * 2)), want * 2)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     results: list[Result] = []
+    made_n = {True: 0, False: 0}
     skipped: list[str] = []
     errors: list[tuple[str, str, str]] = []
     attempted: set[str] = set()
-    for i, (_, f, preset, why) in enumerate(ranked[:budget]):
-        if len(results) >= want:
+    for i, (_, f, preset, why) in enumerate(queue):
+        camp = bool(campaign.of(preset))
+        if max_clips:
+            if len(results) >= max_clips:
+                break
+        elif made_n[True] >= want[True] and made_n[False] >= want[False]:
             break
-        if free_left is not None and not campaign.of(preset) and free_left <= 0:
+        elif made_n[camp] >= want[camp]:
+            continue
+        if free_left is not None and not camp and free_left <= 0:
             continue
         attempted.add(origin.get(id(f), f.url))
         work = base / f"hunt{i}"
@@ -371,8 +390,9 @@ def run_hunt(cfg: dict, streamers: list[dict], base: Path, outdir: Path, *,
                 deliver_result(res, cfg)
             if not made:
                 skipped.append(f"@{f.streamer} · {f.title[:60]} (note trop basse, langue ou contrôle NO-GO)")
-            if free_left is not None and not campaign.of(preset):
+            if free_left is not None and not camp:
                 free_left -= len(made)
+            made_n[camp] += len(made)
             results.extend(made)
         except fetch.FetchError as exc:
             errors.append((f.url, str(exc), exc.hint))

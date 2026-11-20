@@ -309,3 +309,54 @@ def test_gallery_keeps_the_posted_mark_of_a_redone_clip(tmp_path):
     got = {c["file"]: c.get("replaces") for c in json.loads((tmp_path / "site" / "clips.json").read_text())["clips"]}
     assert got == {"20261120-021500-dom-10.mp4": ["20261119-173336-dom-10.mp4"],   # refait : garde la coche
                    "20261120-021500-dom-20.mp4": None, "20261120-021500-dom-21.mp4": None}   # rediffusion : non
+
+
+def test_a_live_campaign_never_takes_the_places_of_other_streamers(monkeypatch, tmp_path):
+    cfg = load_config()
+    cfg = dict(cfg, hunt=dict(cfg["hunt"], max_per_run=2, campaign_max_per_run=3, max_candidates=4, max_per_day=0))
+    monkeypatch.setattr(hunt, "SEEN", tmp_path / "seen.json")
+    dom = {"names": ["dom"], "campaign": {"name": "Dom GTA 6"}}
+    lots = [(100.0 - n, found(n, hours=1, streamer="dom"), dom, "campagne") for n in range(1, 30)]
+    others = [(5.0, found(90 + n, hours=1, streamer=f"autre{n}"), {}, "GTA 6") for n in range(1, 4)]
+    monkeypatch.setattr(hunt, "discover", lambda c, s: ([], []))
+    monkeypatch.setattr(hunt, "rank", lambda *a, **k: lots + others)
+    calls = []
+
+    class R:
+        go, title, meta = True, "t", {}
+
+    monkeypatch.setattr(hunt, "process_request", lambda req, *a: calls.append(req.meta.get("streamer") or req.url) or [R()])
+    monkeypatch.setattr(hunt, "deliver_result", lambda res, cfg: None)
+    for name in ("open_issue", "markdown_report", "cleanup_releases"):
+        monkeypatch.setattr(hunt.deliver, name, lambda *a, **k: "")
+    monkeypatch.setattr(hunt.deliver, "pages_url", lambda: "")
+    hunt.run_hunt(cfg, [], tmp_path, tmp_path)
+    assert len(calls) == 5                                     # 3 clips de campagne + 2 autres
+    assert sum("dom" in str(c) for c in calls) == 3
+    # Passage réservé à la campagne (veille) : seulement la campagne.
+    calls.clear()
+    monkeypatch.setattr(hunt, "SEEN", tmp_path / "seen2.json")
+    hunt.run_hunt(cfg, [dom], tmp_path, tmp_path, campaign_only=True)
+    assert len(calls) == 3 and all("dom" in str(c) for c in calls)
+
+
+def test_gallery_keeps_room_for_other_streamers_during_a_campaign(tmp_path):
+    src = tmp_path / "clips"
+    src.mkdir()
+    cards = {}
+    for n in range(40):   # 40 clips de campagne, tous plus récents que les autres
+        cards[f"20261119-2{n // 10}{n % 10:01d}000-dom-{n:02d}"] = {"campaign": {"name": "Dom"}, "ai_score": 9 if n in (3, 7) else 6,
+                                                                "source_url": f"https://kick.com/dom/clips/{n}"}
+    for n in range(10):
+        cards[f"20261119-10{n}000-autre{n}-00"] = {"source_url": f"https://twitch.tv/a{n}/clip/x"}
+    for name, extra in cards.items():
+        (src / f"{name}.mp4").write_bytes(b"\x00")
+        (src / f"{name}.json").write_text(json.dumps(dict(extra, file=f"{name}.mp4", go=True, title=name,
+                                                          made_at=f"2026-11-19T{name[9:11]}:{name[11:13]}:00+00:00")))
+    cfg = load_config()
+    cfg = dict(cfg, gallery=dict(cfg["gallery"], max_clips=20, campaign_max_clips=8))
+    gallery.build(tmp_path / "site", cfg, from_dir=src)
+    got = [c["file"] for c in json.loads((tmp_path / "site" / "clips.json").read_text())["clips"]]
+    dom = [f for f in got if "-dom-" in f]
+    assert len(dom) == 8 and len(got) - len(dom) == 10            # les 10 autres streamers restent visibles
+    assert {"20261119-203000-dom-03.mp4", "20261119-207000-dom-07.mp4"} <= set(dom)   # les mieux notés d'abord

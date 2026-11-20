@@ -113,7 +113,7 @@ DEFAULTS: dict = {
                    "languages": ["fr", "en"], "per_game": 50},
         "kick": {"enabled": True, "categories": ["grand-theft-auto-vi", "grand-theft-auto-v"]},
     },
-    "gallery": {"days": 7, "max_clips": 60, "max_mb": 900, "hide": [],
+    "gallery": {"days": 7, "max_clips": 60, "campaign_max_clips": 30, "max_mb": 900, "hide": [],
                 "schedule_utc": [f"{h:02d}:17" for h in range(1, 24, 2)]},
 }
 

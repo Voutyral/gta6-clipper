@@ -27,6 +27,14 @@ def _when(text: str) -> datetime:
         return datetime.min.replace(tzinfo=timezone.utc)
 
 
+def _score(card: dict) -> float:
+    """Note de l'IA (0 si absente ou illisible)."""
+    try:
+        return float(card.get("ai_score") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _download_asset(repo: str, asset_id: int, dest: Path) -> bool:
     with open(dest, "wb") as f:
         p = subprocess.run(["gh", "api", f"repos/{repo}/releases/assets/{asset_id}",
@@ -117,6 +125,21 @@ def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
         runs.setdefault(c.get("source_url") or c["file"], {}).setdefault(str(c["file"])[:15], []).append(c["file"])
     pairs = [(c, a) for c, a in pairs if id(c) in shown]
     pairs.sort(key=lambda ca: _when(ca[0].get("made_at", "")), reverse=True)
+    # Une campagne ne remplit pas la galerie : ses meilleurs clips seulement (note de l'IA, puis les
+    # plus récents), le reste de la place va aux autres streamers. Le 19/11 au soir, 100 clips de Dom
+    # en 8 h avaient chassé tous les autres de la galerie.
+    per_camp = int(gc.get("campaign_max_clips", 0) or 0)
+    if per_camp:
+        groups: dict[str, list] = {}
+        for ca in pairs:
+            name = (ca[0].get("campaign") or {}).get("name")
+            if name:
+                groups.setdefault(name, []).append(ca)
+        best = set()
+        for items in groups.values():
+            items = sorted(items, key=lambda ca: (_score(ca[0]), _when(ca[0].get("made_at", ""))), reverse=True)
+            best.update(id(ca[0]) for ca in items[:per_camp])
+        pairs = [ca for ca in pairs if not (ca[0].get("campaign") or {}).get("name") or id(ca[0]) in best]
     camps = active_campaigns()
     by_name = {c["name"]: c for c in camps}
     clips = []

@@ -28,7 +28,7 @@ streamers:
     auto: true
     paid: true
     min_views: 1                       # tous les clips de son stream comptent, les plus vus d'abord
-    max_per_day: 60                    # jour du stream GTA 6 : le plafond de 12 bloquait 76 clips le 19/11
+    max_per_day: 20                    # 112 clips Dom faits le 19/11 (73 moments) : assez pour toute la campagne
     story_ok: true                     # moments d'histoire voulus : alerte spoiler, rien de dévoilé
     music: off                         # son clair : pas de musique ajoutée
     sfx: off                           # « ne couvre pas sa meilleure réplique avec un bruitage »

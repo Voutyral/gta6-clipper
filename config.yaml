@@ -121,6 +121,7 @@ hunt:                               # le chasseur : trouve tout seul les clips d
 gallery:
   days: 7                           # clips gardés dans la galerie (les releases durent 7 jours)
   max_clips: 60
+  campaign_max_clips: 30            # par campagne : ses 30 meilleurs clips, la place restante va aux autres streamers
   max_mb: 900                       # GitHub Pages refuse plus de 1 Go : les plus anciens restent dehors
   hide:                             # clips à ne jamais montrer (nom du fichier, sans .mp4)
     - 20261118-030954-suryanshexd-00   # stream en hindi, sans GTA à l'image

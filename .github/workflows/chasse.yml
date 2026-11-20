@@ -82,7 +82,12 @@ jobs:
       YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
       YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
     steps:
+      # Toujours la dernière version de main : une chasse qui attend son tour derrière une autre
+      # repartait de l'état du dépôt au moment de son lancement, et son enregistrement des clips vus
+      # entrait en conflit (3 échecs dans la nuit du 19 au 20/11, clips refaits en double).
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - uses: actions/setup-python@v5
         with:
