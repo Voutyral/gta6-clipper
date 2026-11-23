@@ -38,9 +38,19 @@ def release_upload(path: Path) -> str:
     return f"{server}/{os.environ['GITHUB_REPOSITORY']}/releases/download/{tag}/{quote(path.name)}"
 
 
-def cleanup_releases(keep_days: int) -> None:
+def streamer_of(asset: str) -> str:
+    """« 20261119-184808-dasgasd3m-40.mp4 » → « dasgasd3m » (nom du streamer dans le fichier)."""
+    parts = asset.rsplit(".", 1)[0].split("-")
+    return "-".join(parts[2:-1]) if len(parts) >= 4 else ""
+
+
+def cleanup_releases(keep_days: int, keep: set[str] | None = None) -> None:
+    """Supprime les clips de plus de keep_days jours. Ceux des streamers de `keep` (campagne encore
+    ouverte) restent : seuls les autres fichiers de la release partent."""
     if not in_actions():
         return
+    keep = {k for k in keep or set() if k}
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
     try:
         p = run(["gh", "release", "list", "--limit", "100", "--json", "tagName,createdAt"], quiet=True)
         limit = datetime.now(timezone.utc) - timedelta(days=int(keep_days))
@@ -49,8 +59,20 @@ def cleanup_releases(keep_days: int) -> None:
             if not tag.startswith("clips-"):
                 continue
             created = datetime.fromisoformat(rel["createdAt"].replace("Z", "+00:00"))
-            if created < limit:
-                run(["gh", "release", "delete", tag, "--yes", "--cleanup-tag"], check=False, quiet=True)
+            if created >= limit:
+                continue
+            if keep and repo:
+                rid = run(["gh", "api", f"repos/{repo}/releases/tags/{tag}", "--jq", ".id"], quiet=True).stdout.strip()
+                lines = run(["gh", "api", "--paginate", f"repos/{repo}/releases/{rid}/assets?per_page=100",
+                             "--jq", '.[] | "\\(.id)\\t\\(.name)"'], quiet=True).stdout.splitlines()
+                assets = [ln.split("\t", 1) for ln in lines if "\t" in ln]
+                if any(streamer_of(name) in keep for _, name in assets):
+                    gone = [(aid, name) for aid, name in assets if streamer_of(name) not in keep]
+                    for aid, _ in gone:
+                        run(["gh", "api", "-X", "DELETE", f"repos/{repo}/releases/assets/{aid}"], check=False, quiet=True)
+                    log(f"{tag} : clips de campagne gardés jusqu'à la date limite, {len(gone)} autre(s) fichier(s) supprimé(s).")
+                    continue
+            run(["gh", "release", "delete", tag, "--yes", "--cleanup-tag"], check=False, quiet=True)
     except Exception as exc:
         log(f"Nettoyage des anciens clips ignoré : {exc}")
 

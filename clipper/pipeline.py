@@ -595,5 +595,5 @@ def run_text(text: str, cfg: dict, streamers: list[dict], base: Path, outdir: Pa
     report = deliver.markdown_report(results, errors, gallery=True)
     deliver.issue_comment(report)
     deliver.step_summary(report)
-    deliver.cleanup_releases(int(cfg["delivery"].get("keep_days", 7)))
+    deliver.cleanup_releases(int(cfg["delivery"].get("keep_days", 7)), campaign.open_slugs(streamers))
     return 0 if results else 1

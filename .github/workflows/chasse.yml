@@ -11,11 +11,9 @@ name: Chasseur de clips
 run-name: ${{ github.event.inputs.campaign_only == 'true' && 'Chasse de campagne' || 'Chasseur de clips' }}
 
 on:
-  # EN PAUSE depuis le 23/11/2026, à la demande de Léo : plus aucune chasse automatique.
-  # Pour relancer : retirer les « # » des deux lignes ci-dessous (et ceux de live.yml).
-  # Le bouton « Run workflow » marche toujours pendant la pause.
-  # schedule:
-  #   - cron: "17 */2 * * *"
+  # Pour mettre en pause : mettre en commentaire ces deux lignes (et celles de live.yml).
+  schedule:
+    - cron: "17 */2 * * *"
   workflow_dispatch:
     inputs:
       dry_run:

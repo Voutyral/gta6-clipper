@@ -11,7 +11,7 @@ from clipper import gallery, hunt, sources
 from clipper.config import load_config
 from clipper.pipeline import facecam_box
 
-NOW = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
+NOW = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)   # la chasse compare à l'heure réelle
 
 
 def found(i=1, views=500, hours=3.0, streamer="bob", lang="fr", dur=30.0, title="Gros fail", platform="twitch",
@@ -150,7 +150,7 @@ def test_hunt_loop_produces_marks_seen_and_reports(monkeypatch, tmp_path):
     monkeypatch.setattr(hunt.deliver, "open_issue", lambda *a, **k: issues.append((a, k)))
     monkeypatch.setattr(hunt.deliver, "markdown_report", lambda *a, **k: "rapport")
     monkeypatch.setattr(hunt.deliver, "pages_url", lambda: "")
-    monkeypatch.setattr(hunt.deliver, "cleanup_releases", lambda d: None)
+    monkeypatch.setattr(hunt.deliver, "cleanup_releases", lambda *a: None)
     assert hunt.run_hunt(cfg, [], tmp_path, tmp_path) == 0
     assert len(calls) == 2 and len(delivered) == 1        # le NO-GO n'est pas livré
     seen = json.loads((tmp_path / "seen.json").read_text())

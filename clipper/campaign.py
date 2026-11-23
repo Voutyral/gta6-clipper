@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
 
-from .util import game_key
+from .util import game_key, slugify
 
 SPOILER_HOOK = {"fr": "ALERTE SPOILER", "en": "SPOILER WARNING"}
 SPOILER_LINE = {"fr": "⚠️ Spoiler : moment de l'histoire de GTA 6.",
@@ -37,6 +37,20 @@ def of(preset: dict | None) -> dict:
 def ended(camp: dict, now: datetime | None = None) -> bool:
     closes = _dt(camp.get("closes"))
     return bool(closes and (now or datetime.now(timezone.utc)) > closes)
+
+
+def open_slugs(streamers: list[dict] | None, now: datetime | None = None) -> set[str]:
+    """Noms (tels qu'ils figurent dans les noms de fichiers des clips) des streamers dont la campagne
+    n'est pas terminée. Leurs clips restent stockés et affichés jusqu'à la date limite, même au-delà
+    de delivery.keep_days : Dom, tourné le 19/11, se poste jusqu'au 19/12."""
+    out: set[str] = set()
+    for s in streamers or []:
+        camp = of(s)
+        if camp and not ended(camp, now):
+            for v in (s.get("name"), s.get("kick"), s.get("twitch"), s.get("youtube"), *(s.get("names") or [])):
+                if v:
+                    out.add(slugify(str(v), 24))
+    return out
 
 
 def is_open(camp: dict, now: datetime | None = None) -> bool:

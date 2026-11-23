@@ -46,13 +46,18 @@ def _download_asset(repo: str, asset_id: int, dest: Path) -> bool:
     return True
 
 
-def cards_from_releases(repo: str, days: int, tmp: Path) -> list[tuple[dict, dict]]:
-    """(fiche, assets par nom) pour chaque clip des releases « clips-AAAAMMJJ » récentes."""
+def cards_from_releases(repo: str, days: int, tmp: Path,
+                        open_camps: set[str] | None = None) -> list[tuple[dict, dict]]:
+    """(fiche, assets par nom) pour chaque clip des releases « clips-AAAAMMJJ » récentes. Au-delà de
+    `days`, seuls restent les clips d'une campagne encore ouverte (open_camps : noms de campagne)."""
     p = run(["gh", "api", f"repos/{repo}/releases?per_page=30"], quiet=True)
     limit = datetime.now(timezone.utc) - timedelta(days=days)
     out = []
     for rel in json.loads(p.stdout or "[]"):
-        if not str(rel.get("tag_name", "")).startswith("clips-") or _when(rel.get("created_at")) < limit:
+        if not str(rel.get("tag_name", "")).startswith("clips-"):
+            continue
+        old = _when(rel.get("created_at")) < limit
+        if old and not open_camps:
             continue
         assets = {a["name"]: a for a in rel.get("assets") or []}
         for name, a in assets.items():
@@ -61,9 +66,12 @@ def cards_from_releases(repo: str, days: int, tmp: Path) -> list[tuple[dict, dic
             dest = tmp / name
             if _download_asset(repo, a["id"], dest):
                 try:
-                    out.append((json.loads(dest.read_text(encoding="utf-8")), assets))
+                    card = json.loads(dest.read_text(encoding="utf-8"))
                 except Exception:
                     continue
+                if old and (card.get("campaign") or {}).get("name") not in open_camps:
+                    continue
+                out.append((card, assets))
     return out
 
 
@@ -114,7 +122,9 @@ def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
     tmp = out / "_tmp"
     tmp.mkdir()
     repo = os.environ.get("GITHUB_REPOSITORY", "")
-    pairs = cards_from_dir(from_dir) if from_dir else cards_from_releases(repo, days, tmp)
+    camps = active_campaigns()
+    pairs = cards_from_dir(from_dir) if from_dir else cards_from_releases(repo, days, tmp,
+                                                                          {c["name"] for c in camps})
     pairs = [(c, a) for c, a in pairs if c.get("go") and c.get("file")]
     shown = {id(c) for c in keep_latest([c for c, _ in pairs], gc.get("hide"))}
     # Versions d'un même clip par lancement : un clip refait (montage corrigé) remplace l'ancien,
@@ -140,7 +150,6 @@ def build(out: Path, cfg: dict, from_dir: Path | None = None) -> int:
             items = sorted(items, key=lambda ca: (_score(ca[0]), _when(ca[0].get("made_at", ""))), reverse=True)
             best.update(id(ca[0]) for ca in items[:per_camp])
         pairs = [ca for ca in pairs if not (ca[0].get("campaign") or {}).get("name") or id(ca[0]) in best]
-    camps = active_campaigns()
     by_name = {c["name"]: c for c in camps}
     clips = []
     for card, assets in pairs[:max_clips]:

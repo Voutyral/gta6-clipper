@@ -12,17 +12,16 @@ name: Veille des lives
 # dès que la dernière date de plus de 2 heures. Elle démarre aussi quand ce fichier, clipper/live.py
 # ou streamers.yaml change. En dehors de ces périodes : un seul contrôle par lancement.
 on:
-  # EN PAUSE depuis le 23/11/2026, à la demande de Léo : plus de veille automatique.
-  # Pour relancer : retirer les « # » des lignes schedule et push ci-dessous (et ceux de chasse.yml).
-  # schedule:
-  #   - cron: "41 * * * *"
+  # Pour mettre en pause : mettre en commentaire schedule et push (et l'horaire de chasse.yml).
+  schedule:
+    - cron: "41 * * * *"
   workflow_dispatch:
-  # push:
-  #   branches: [main]
-  #   paths:
-  #     - ".github/workflows/live.yml"
-  #     - "clipper/live.py"
-  #     - "streamers.yaml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/live.yml"
+      - "clipper/live.py"
+      - "streamers.yaml"
 
 permissions:
   contents: write   # état de la veille (state/live.json)

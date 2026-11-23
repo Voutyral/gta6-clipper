@@ -134,7 +134,7 @@ def test_campaign_only_run_skips_everyone_else(monkeypatch, tmp_path):
 
     monkeypatch.setattr(hunt, "discover", fake_discover)
     monkeypatch.setattr(hunt.deliver, "step_summary", lambda *a, **k: None)
-    monkeypatch.setattr(hunt.deliver, "cleanup_releases", lambda d: None)
+    monkeypatch.setattr(hunt.deliver, "cleanup_releases", lambda *a: None)
     others = [{"name": "Bob", "twitch": "bob"}]
     assert hunt.run_hunt(cfg, others + [DOM], tmp_path, tmp_path, campaign_only=True) == 0
     assert seen_cfg == {"twitch": False, "kick": False, "streamers": ["Dasgas Dom"]}
@@ -224,3 +224,61 @@ def test_campaign_refuses_a_clip_showing_another_game():
         assert "autre_jeu" not in plan(ok).risks, ok
     free = build_plan(cand, {"score": 8, "risks": [], "game": "Fortnite"}, [], req, info, cfg, {}, "@x", 0)
     assert "autre_jeu" not in free.risks                                       # hors campagne : tous les jeux
+
+
+def test_campaign_clips_outlive_keep_days_until_the_campaign_closes(monkeypatch):
+    from datetime import datetime, timezone
+
+    from clipper import deliver
+    before = datetime(2026, 11, 27, tzinfo=timezone.utc)
+    assert "dasgasd3m" in campaign.open_slugs([DOM], before)          # nom tel qu'il est dans les fichiers
+    assert campaign.open_slugs([DOM], datetime(2026, 12, 21, tzinfo=timezone.utc)) == set()   # campagne finie
+    assert deliver.streamer_of("20261119-184808-dasgasd3m-40.mp4") == "dasgasd3m"
+    assert deliver.streamer_of("20261118-030954-les-mecs-du-gta-00.json") == "les-mecs-du-gta"
+    # Release de plus de 7 jours : on garde les fichiers de Dom, on supprime les autres.
+    calls = []
+    listing = {"list": '[{"tagName": "clips-20261119", "createdAt": "2026-11-10T23:38:00Z"},'
+                       ' {"tagName": "clips-20261115", "createdAt": "2026-11-05T01:00:00Z"}]'}
+
+    def fake_run(cmd, **k):
+        calls.append(cmd)
+
+        class P:
+            stdout = ""
+        if cmd[:3] == ["gh", "release", "list"]:
+            P.stdout = listing["list"]
+        elif "--jq" in cmd and cmd[-1] == ".id":
+            P.stdout = "77" if "clips-20261119" in cmd[2] else "55"
+        elif "--paginate" in cmd:
+            P.stdout = ("1\t20261119-184808-dasgasd3m-40.mp4\n2\t20261119-184808-dasgasd3m-40.json\n"
+                        "3\t20261119-101010-zerator-00.mp4\n") if "/77/" in cmd[3] else "9\t20261115-101010-squeezie-00.mp4\n"
+        return P()
+    monkeypatch.setattr(deliver, "run", fake_run)
+    monkeypatch.setattr(deliver, "in_actions", lambda: True)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "leo/clipper")
+    deliver.cleanup_releases(7, {"dasgasd3m"})
+    deleted_assets = [c[-1] for c in calls if c[:4] == ["gh", "api", "-X", "DELETE"]]
+    deleted_releases = [c[3] for c in calls if c[:3] == ["gh", "release", "delete"]]
+    assert deleted_assets == ["repos/leo/clipper/releases/assets/3"]      # zerator part, Dom reste
+    assert deleted_releases == ["clips-20261115"]                         # sans campagne : supprimée entière
+
+
+def test_gallery_shows_old_campaign_clips_until_the_campaign_closes(monkeypatch, tmp_path):
+    import json
+    from datetime import datetime, timedelta, timezone
+
+    from clipper import gallery
+    old = (datetime.now(timezone.utc) - timedelta(days=12)).isoformat()
+    new = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    rels = [{"tag_name": "clips-old", "created_at": old, "assets": [{"name": "a-dom.json", "id": 1}, {"name": "b-zev.json", "id": 2}]},
+            {"tag_name": "clips-new", "created_at": new, "assets": [{"name": "c-zev.json", "id": 3}]}]
+    cards = {1: {"file": "a", "campaign": {"name": "Dom GTA 6"}}, 2: {"file": "b"}, 3: {"file": "c"}}
+
+    class P:
+        stdout = json.dumps(rels)
+    monkeypatch.setattr(gallery, "run", lambda *a, **k: P())
+    monkeypatch.setattr(gallery, "_download_asset",
+                        lambda repo, aid, dest: dest.write_text(json.dumps(cards[aid])) or True)
+    got = [c["file"] for c, _ in gallery.cards_from_releases("leo/clipper", 7, tmp_path, {"Dom GTA 6"})]
+    assert sorted(got) == ["a", "c"]                                       # le vieux clip hors campagne part
+    assert [c["file"] for c, _ in gallery.cards_from_releases("leo/clipper", 7, tmp_path, set())] == ["c"]

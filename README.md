@@ -1,8 +1,5 @@
 # Clippeur GTA 6
 
-> ⏸ **En pause depuis le 23/11/2026.** La chasse et la veille ne partent plus toutes seules : les lignes `schedule` (et `push` pour la veille) sont en commentaire dans `.github/workflows/chasse.yml` et `.github/workflows/live.yml`. La galerie reste en ligne telle quelle, et le bouton **Run workflow** marche toujours à la main.
-> **Pour relancer** : retirer les « # » de ces lignes. **Avant de relancer** : la première chasse efface les clips de plus de 7 jours (`delivery.keep_days` dans `config.yaml`), donc ceux de Dom tournés le 19/11, alors que sa campagne reste ouverte jusqu'au 19/12. Régler leur conservation d'abord.
-
 Deux façons de l'utiliser, toutes deux depuis le téléphone :
 
 * **Automatique** : toutes les 2 heures, le chasseur va chercher les clips GTA les plus regardés du moment sur Twitch et Kick, garde les meilleurs, les monte et les range dans ta galerie (30 clips par jour au plus, hors campagne). Tu n'as plus qu'à appuyer sur **Partager**.
@@ -162,6 +159,8 @@ Limite connue : le cadre de la webcam est donné par Gemini et déborde parfois 
 ## Dépannage
 
 * **La chasse ne trouve rien** : regarde le résumé du lancement (onglet **Actions**). Les sources illisibles y sont listées. Les clips déjà vus ne reviennent jamais, sauf ceux listés dans `state/redo.json`.
+* **Combien de temps les clips restent** : 7 jours (`delivery.keep_days` dans `config.yaml`), dans le stockage comme dans la galerie. Exception : les clips d'une campagne encore ouverte restent jusqu'à sa date limite (`closes` dans `streamers.yaml`), puisqu'elle n'accepte souvent qu'un seul stream (Dom : tourné le 19/11, à poster jusqu'au 19/12).
+* **Mettre en pause** : mettre en commentaire les lignes `schedule` de `.github/workflows/chasse.yml` et `schedule` et `push` de `.github/workflows/live.yml`. La galerie reste en ligne, et **Run workflow** marche toujours à la main.
 * **Refaire des clips après une correction du montage** : mets leurs liens dans `state/redo.json` (`[{"url": "…"}]`). La chasse les refait en premier, 12 par passage, puis les retire de la liste. Dans la galerie, la nouvelle version remplace l'ancienne et garde sa coche « Posté ».
 * **Trop peu de clips** : baisse `min_ai_score` ou `min_views`, ou ajoute `en` aux langues dans `config.yaml`.
 * **Tout vérifier d'un coup** : onglet **Actions**, **Diagnostic**, **Run workflow**. Le bilan dit si Gemini et l'envoi YouTube répondent, et teste les liens que tu lui donnes.
