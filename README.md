@@ -1,5 +1,8 @@
 # Clippeur GTA 6
 
+> ⏸ **En pause depuis le 23/11/2026.** La chasse et la veille ne partent plus toutes seules : les lignes `schedule` (et `push` pour la veille) sont en commentaire dans `.github/workflows/chasse.yml` et `.github/workflows/live.yml`. La galerie reste en ligne telle quelle, et le bouton **Run workflow** marche toujours à la main.
+> **Pour relancer** : retirer les « # » de ces lignes. **Avant de relancer** : la première chasse efface les clips de plus de 7 jours (`delivery.keep_days` dans `config.yaml`), donc ceux de Dom tournés le 19/11, alors que sa campagne reste ouverte jusqu'au 19/12. Régler leur conservation d'abord.
+
 Deux façons de l'utiliser, toutes deux depuis le téléphone :
 
 * **Automatique** : toutes les 2 heures, le chasseur va chercher les clips GTA les plus regardés du moment sur Twitch et Kick, garde les meilleurs, les monte et les range dans ta galerie (30 clips par jour au plus, hors campagne). Tu n'as plus qu'à appuyer sur **Partager**.
