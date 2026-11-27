@@ -3423,5 +3423,50 @@
 "d": "2026-11-26",
 "s": "sashagrey",
 "ok": true
+},
+"kick:clip_01M8DK7P694JV4WKVHVK97TMJY": {
+"d": "2026-11-27",
+"s": "dasgasd3m",
+"ok": true
+},
+"kick:vod-be2c2aad-f224-407d-ba7c-4b3e7c599d80": {
+"d": "2026-11-27",
+"s": "dasgasd3m",
+"ok": false
+},
+"twitch:LazyRoundKaleOMGScoots-S7r-zxD3lJawPNcQ": {
+"d": "2026-11-27",
+"s": "banksatkin",
+"ok": true
+},
+"twitch:MoralKathishPicklesPermaSmug-UEIRnzmcCfJAubFg": {
+"d": "2026-11-27",
+"s": "gotaga",
+"ok": true
+},
+"twitch:SpunkyPlayfulSandwichDerp-jm59fy00oJ0LBAf6": {
+"d": "2026-11-27",
+"s": "ohnepixel",
+"ok": true
+},
+"twitch:RepleteIncredulousRingPRChase-7mc4_LQ3Khres7SA": {
+"d": "2026-11-27",
+"s": "donatchottv",
+"ok": true
+},
+"twitch:StormyDeliciousSalamanderFUNgineer-MI30MH2fhrhqE_TS": {
+"d": "2026-11-27",
+"s": "ohnepixel",
+"ok": false
+},
+"twitch:FineAbnegateBillWutFace-2IXsrtA1x0W1rap2": {
+"d": "2026-11-27",
+"s": "gotaga",
+"ok": true
+},
+"twitch:PleasantDirtyWallabyDancingBanana-0knKCXLfB4Uw-FS0": {
+"d": "2026-11-27",
+"s": "nickeh30",
+"ok": true
 }
 }
